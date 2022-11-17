@@ -347,6 +347,8 @@ PositionUtils.CalculateBoundingBoxFromPositionAndRange = function(position, rang
 end
 
 --- Calculate a list of tile positions that are within a bounding box.
+---
+--- Ignores the `orientation` field of the positionedBoundingBox, and assumes its always 0.
 ---@param positionedBoundingBox BoundingBox
 ---@return MapPosition[]
 PositionUtils.CalculateTilesUnderPositionedBoundingBox = function(positionedBoundingBox)

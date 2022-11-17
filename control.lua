@@ -1,8 +1,17 @@
+local PlayerVehicle = require("scripts.player-vehicle")
+local DrivenCar = require("scripts.driven-car")
+local DrivenTrain = require("scripts.driven-train")
+
 local function CreateGlobals()
+    DrivenCar.CreateGlobals()
+    DrivenTrain.CreateGlobals()
 end
 
 local function OnLoad()
-	--Any Remote Interface registration calls can go in here or in root of control.lua
+    --Any Remote Interface registration calls can go in here or in root of control.lua
+    PlayerVehicle.OnLoad()
+    DrivenCar.OnLoad()
+    DrivenTrain.OnLoad()
 end
 
 local function OnSettingChanged(event)
@@ -13,10 +22,12 @@ end
 
 local function OnStartup()
     CreateGlobals()
-	OnLoad()
+    OnLoad()
     OnSettingChanged(nil)
-end
 
+    DrivenCar.OnStartup()
+    DrivenTrain.OnStartup()
+end
 
 script.on_init(OnStartup)
 script.on_configuration_changed(OnStartup)

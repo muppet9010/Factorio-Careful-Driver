@@ -1,0 +1,11 @@
+{
+    "name": "careful_driver",
+    "version": "1.0.0",
+    "title": "Careful Driver",
+    "author": "Muppet9010",
+    "contact": "",
+    "homepage": "https://mods.factorio.com/mod/careful_driver",
+    "factorio_version": "1.1",
+    "dependencies": ["base >= 1.1"],
+    "description": "Encourages players to be careful drivers via negative reinforcement."
+}

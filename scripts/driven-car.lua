@@ -15,6 +15,15 @@ local Common = require("common")
 ---@field oldPosition MapPosition
 ---@field oldSurface LuaSurface
 
+---@class CarEnteringWater
+---@field id int
+---@field entity LuaEntity
+---@field oldSpeedAbs float
+---@field speedPositive boolean
+---@field oldPosition MapPosition
+---@field orientation RealOrientation
+---@field surface LuaSurface
+
 DrivenCar.OnLoad = function()
     EventScheduler.RegisterScheduler()
     EventScheduler.RegisterScheduledEventType("DrivenCar.CheckTrackedCars_EachTick", DrivenCar.CheckTrackedCars_EachTick)
@@ -27,6 +36,7 @@ end
 DrivenCar.CreateGlobals = function()
     global.drivenCar = global.drivenCar or {} ---@class DrivenCar_Global
     global.drivenCar.movingCars = global.drivenCar.movingCars or {} ---@type table<LuaEntity, MovingCar> # Keyed by the vehicle entity.
+    global.drivenCar.enteringWater = global.drivenCar.enteringWater or {} ---@type table<int, CarEnteringWater> # Keyed by a sequential integer number.
 end
 
 DrivenCar.OnStartup = function()
@@ -131,6 +141,13 @@ DrivenCar.CheckTrackedCars_EachTick = function(event)
 
         ::EndOfMovingCarDetailsLoop::
     end
+
+    -- Progress any cars that are entering the water.
+    for index, carEnteringWater in pairs(global.drivenCar.enteringWater) do
+        if not DrivenCar.CarContinuingToEnterWater(carEnteringWater) then
+            global.drivenCar.enteringWater[index] = nil
+        end
+    end
 end
 
 --- A car has just stopped, did it hit something?
@@ -147,7 +164,7 @@ DrivenCar.DidCarHitSomethingToStop = function(carEntity, oldPosition, oldSpeed, 
 
     -- Detect if it was a tile we hit. This is easier to check so do it first.
     -- FUTURE: can probably cache a lot of this once we get its name earlier in code. Not worth it unless we get lots of other attributes regularly.
-    local futureTile = surface.get_tile(futurePosition.x--[[@as int]] , futurePosition.y--[[@as int]] )
+    local futureTile = surface.get_tile(futurePosition--[[@as TilePosition]] )
     local futureTile_prototype = futureTile.prototype
     local carPrototypeCollidesWith = carEntity.prototype.collision_mask
     for tileCollisionMask in pairs(futureTile_prototype.collision_mask) do
@@ -177,10 +194,13 @@ end
 ---@param position MapPosition
 ---@param surface LuaSurface
 DrivenCar.HitWater = function(carEntity, speed, position, surface)
+    local orientation = carEntity.orientation
+
     -- Place the stuck in water car where the real car was.
     local carInWaterEntity = surface.create_entity({ name = Common.GetCarInWaterName(carEntity.name), position = position, force = carEntity.force, player = carEntity.last_user, create_build_effect_smoke = false, raise_built = true })
     if carInWaterEntity == nil then error("failed to make car type in water") end
-    carInWaterEntity.orientation = carEntity.orientation
+    carInWaterEntity.orientation = orientation
+    carInWaterEntity.color = carEntity.color
 
     -- Transfer the main inventory across.
     local carEntity_mainInventory = carEntity.get_inventory(defines.inventory.car_trunk)
@@ -193,25 +213,59 @@ DrivenCar.HitWater = function(carEntity, speed, position, surface)
     end
 
     -- Transfer any fuel across.
+    local carEntity_burner = carEntity.burner
+    if carEntity_burner ~= nil then
+        local carInWaterEntity_burner = carInWaterEntity.burner ---@cast carInWaterEntity_burner - nil # if the real carEntity has an inventory so will the water copy of it.
 
-    -- Transfer any ammo/weapon slots across.
+        local carEntity_burnerInputInventory = carEntity_burner.inventory
+        if carEntity_burnerInputInventory ~= nil and not carEntity_burnerInputInventory.is_empty() then
+            local carInWaterEntity_BurnerInputInventory = carInWaterEntity_burner.inventory ---@cast carInWaterEntity_BurnerInputInventory - nil # if the real carEntity has an inventory so will the water copy of it.
+            ---@type uint
+            for stackIndex = 1, #carEntity_burnerInputInventory do
+                carEntity_burnerInputInventory[stackIndex].swap_stack(carInWaterEntity_BurnerInputInventory[stackIndex])
+            end
+        end
+
+        local carEntity_burnerResultInventory = carEntity_burner.burnt_result_inventory
+        if carEntity_burnerResultInventory ~= nil and not carEntity_burnerResultInventory.is_empty() then
+            local carInWaterEntity_BurnerResultInventory = carInWaterEntity_burner.burnt_result_inventory ---@cast carInWaterEntity_BurnerResultInventory - nil # if the real carEntity has an inventory so will the water copy of it.
+            ---@type uint
+            for stackIndex = 1, #carEntity_burnerResultInventory do
+                carEntity_burnerResultInventory[stackIndex].swap_stack(carInWaterEntity_BurnerResultInventory[stackIndex])
+            end
+        end
+    end
+
+    -- Transfer any ammo across.
+    local carEntity_ammoInventory = carEntity.get_inventory(defines.inventory.car_ammo)
+    if carEntity_ammoInventory ~= nil and not carEntity_ammoInventory.is_empty() then
+        local carInWaterEntity_ammoInventory = carInWaterEntity.get_inventory(defines.inventory.car_ammo) ---@cast carInWaterEntity_ammoInventory - nil # if the real carEntity has an inventory so will the water copy of it.
+        ---@type uint
+        for stackIndex = 1, #carEntity_ammoInventory do
+            carEntity_ammoInventory[stackIndex].swap_stack(carInWaterEntity_ammoInventory[stackIndex])
+        end
+    end
 
     -- Explicitly kick any players out of the car and find them somewhere valid to stand, as by default they will end up inside the new car's collision box.
     local driver = carEntity.get_driver()
     if driver ~= nil then
         carEntity.set_driver(nil) -- Must do this from car's view and not player.driving as that doesn't work.
-        DrivenCar.PlacePreviousVehicleOccupantsNicely(driver, position, surface)
+        --DrivenCar.PlacePreviousVehicleOccupantsNicely(driver, position, surface) -- If the water car has no collision box no need to move the auto placed character as it should be a sensible position already.
     end
     local passenger = carEntity.get_passenger()
     if passenger ~= nil then
         carEntity.set_passenger(nil) -- Must do this from car's view and not player.driving as that doesn't work.
-        DrivenCar.PlacePreviousVehicleOccupantsNicely(passenger, position, surface)
+        --DrivenCar.PlacePreviousVehicleOccupantsNicely(passenger, position, surface) -- If the water car has no collision box no need to move the auto placed character as it should be a sensible position already.
     end
 
     -- Remove the real vehicle.
     carEntity.destroy({ raise_destroy = true })
+
+    -- The progression of the vehicle each tick will handle its initial movement and creation of water splash effects etc.
+    global.drivenCar.enteringWater[#global.drivenCar.enteringWater + 1] = { id = #global.drivenCar.enteringWater + 1, entity = carInWaterEntity, oldPosition = position, oldSpeedAbs = math.abs(speed) --[[@as float]] , speedPositive = speed > 0, orientation = orientation, surface = surface }
 end
 
+--- FUTURE: not needed if the water car variant doesn't have any collision mask. But keep just in case for now.
 --- Place the previous occupant of a vehicle seat nicely. They will have already been ejected from the vehicle.
 ---@param seatOccupant LuaPlayer|LuaEntity
 ---@param vehiclePosition MapPosition
@@ -224,7 +278,42 @@ DrivenCar.PlacePreviousVehicleOccupantsNicely = function(seatOccupant, vehiclePo
             character.teleport(characterNewPosition)
         end
     end
+end
 
+--- Called each tick for a car that is entering the water currently.
+---@param carEnteringWater CarEnteringWater
+---@return boolean continueMovingCar
+DrivenCar.CarContinuingToEnterWater = function(carEnteringWater)
+    -- Check the car in water entity hasn't been removed.
+    if not carEnteringWater.entity.valid then return false end
+
+    -- Move the car based on the current speed.
+    local currentSpeed = carEnteringWater.speedPositive and carEnteringWater.oldSpeedAbs or -carEnteringWater.oldSpeedAbs
+    local newPosition = PositionUtils.GetPositionForOrientationDistance(carEnteringWater.oldPosition, currentSpeed, carEnteringWater.orientation)
+    carEnteringWater.entity.teleport(newPosition)
+    carEnteringWater.oldPosition = newPosition
+
+    -- Add a water splash at the front of the vehicle based on the speed.
+    local splashesToAdd = math.ceil(carEnteringWater.oldSpeedAbs / 0.05)
+    for _ = 1, splashesToAdd do
+        -- TODO: cache these details.
+        local boundingBox = carEnteringWater.entity.prototype.collision_box
+        local offset = {
+            x = (math.random() * (boundingBox.left_top.x - 1)) + ((boundingBox.right_bottom.x + 1) / 2),
+            y = boundingBox.left_top.y - 0.5 -- Put this a bit in front of the vehicle.
+        }
+        local waterSplashPosition = PositionUtils.RotateOffsetAroundPosition(carEnteringWater.orientation, offset, newPosition)
+        carEnteringWater.surface.create_entity({ name = "careful_driver-water_splash-off_grid", position = waterSplashPosition })
+    end
+
+    -- Record the reduced speed for next tick. Reduce by the greater reduction between 33% of current or 0.02. Speed of 1 is 108km/h
+    carEnteringWater.oldSpeedAbs = math.max(carEnteringWater.oldSpeedAbs - math.max(carEnteringWater.oldSpeedAbs / 3, 0.02), 0)
+
+    if carEnteringWater.oldSpeedAbs > 0 then
+        return true
+    else
+        return false
+    end
 end
 
 return DrivenCar

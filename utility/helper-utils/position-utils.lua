@@ -95,7 +95,7 @@ end
 --- Return the positioned bounding box (collision box) of a bounding box applied to a position. Or nil if invalid data.
 ---@param centerPos MapPosition
 ---@param boundingBox BoundingBox
----@param orientation RealOrientation
+---@param orientation RealOrientation # Only supports 0, 0.25, 0.5, 0.75 and 1.
 ---@return BoundingBox?
 PositionUtils.ApplyBoundingBoxToPosition = function(centerPos, boundingBox, orientation)
     local checked_centerPos = PositionUtils.TableToProperPosition(centerPos)
@@ -227,8 +227,8 @@ PositionUtils.RotateOffsetAroundPosition = function(orientation, offset, positio
     local rad = math_rad(orientation * 360)
     local cosValue = math_cos(rad)
     local sinValue = math_sin(rad)
-    local rotatedX = (position.x * cosValue) - (position.y * sinValue)
-    local rotatedY = (position.x * sinValue) + (position.y * cosValue)
+    local rotatedX = (offset.x * cosValue) - (offset.y * sinValue)
+    local rotatedY = (offset.x * sinValue) + (offset.y * cosValue)
     return { x = position.x + rotatedX, y = position.y + rotatedY }
 end
 

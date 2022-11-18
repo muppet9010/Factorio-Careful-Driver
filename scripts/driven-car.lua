@@ -163,7 +163,7 @@ DrivenCar.DidCarHitSomethingToStop = function(carEntity, oldPosition, oldSpeed, 
     -- Entities are collided with by a vehicle on their collision box. While tiles are collided with by the vehicles position and which tile this lands on. This means we would collide with an entity prior to a tile.
 
     -- Detect if it was a tile we hit. This is easier to check so do it first.
-    -- FUTURE: can probably cache a lot of this once we get its name earlier in code. Not worth it unless we get lots of other attributes regularly.
+    -- TODO: can probably cache a lot of this once we get its name earlier in code. Not worth it unless we get lots of other attributes regularly.
     local futureTile = surface.get_tile(futurePosition--[[@as TilePosition]] )
     local futureTile_prototype = futureTile.prototype
     local carPrototypeCollidesWith = carEntity.prototype.collision_mask
@@ -205,7 +205,7 @@ DrivenCar.HitWater = function(carEntity, speed, position, surface)
     -- Transfer the main inventory across.
     local carEntity_mainInventory = carEntity.get_inventory(defines.inventory.car_trunk)
     if carEntity_mainInventory ~= nil and not carEntity_mainInventory.is_empty() then
-        local carInWaterEntity_mainInventory = carInWaterEntity.get_inventory(defines.inventory.car_trunk) ---@cast carInWaterEntity_mainInventory - nil # if the real carEntity has an inventory so will the water copy of it.
+        local carInWaterEntity_mainInventory = carInWaterEntity.get_inventory(defines.inventory.car_trunk) ---@cast carInWaterEntity_mainInventory - nil # If the real carEntity has an inventory so will the water copy of it.
         ---@type uint
         for stackIndex = 1, #carEntity_mainInventory do
             carEntity_mainInventory[stackIndex].swap_stack(carInWaterEntity_mainInventory[stackIndex])
@@ -215,11 +215,11 @@ DrivenCar.HitWater = function(carEntity, speed, position, surface)
     -- Transfer any fuel across.
     local carEntity_burner = carEntity.burner
     if carEntity_burner ~= nil then
-        local carInWaterEntity_burner = carInWaterEntity.burner ---@cast carInWaterEntity_burner - nil # if the real carEntity has an inventory so will the water copy of it.
+        local carInWaterEntity_burner = carInWaterEntity.burner ---@cast carInWaterEntity_burner - nil # If the real carEntity has an inventory so will the water copy of it.
 
         local carEntity_burnerInputInventory = carEntity_burner.inventory
         if carEntity_burnerInputInventory ~= nil and not carEntity_burnerInputInventory.is_empty() then
-            local carInWaterEntity_BurnerInputInventory = carInWaterEntity_burner.inventory ---@cast carInWaterEntity_BurnerInputInventory - nil # if the real carEntity has an inventory so will the water copy of it.
+            local carInWaterEntity_BurnerInputInventory = carInWaterEntity_burner.inventory ---@cast carInWaterEntity_BurnerInputInventory - nil # If the real carEntity has an inventory so will the water copy of it.
             ---@type uint
             for stackIndex = 1, #carEntity_burnerInputInventory do
                 carEntity_burnerInputInventory[stackIndex].swap_stack(carInWaterEntity_BurnerInputInventory[stackIndex])
@@ -228,7 +228,7 @@ DrivenCar.HitWater = function(carEntity, speed, position, surface)
 
         local carEntity_burnerResultInventory = carEntity_burner.burnt_result_inventory
         if carEntity_burnerResultInventory ~= nil and not carEntity_burnerResultInventory.is_empty() then
-            local carInWaterEntity_BurnerResultInventory = carInWaterEntity_burner.burnt_result_inventory ---@cast carInWaterEntity_BurnerResultInventory - nil # if the real carEntity has an inventory so will the water copy of it.
+            local carInWaterEntity_BurnerResultInventory = carInWaterEntity_burner.burnt_result_inventory ---@cast carInWaterEntity_BurnerResultInventory - nil # If the real carEntity has an inventory so will the water copy of it.
             ---@type uint
             for stackIndex = 1, #carEntity_burnerResultInventory do
                 carEntity_burnerResultInventory[stackIndex].swap_stack(carInWaterEntity_BurnerResultInventory[stackIndex])
@@ -239,7 +239,7 @@ DrivenCar.HitWater = function(carEntity, speed, position, surface)
     -- Transfer any ammo across.
     local carEntity_ammoInventory = carEntity.get_inventory(defines.inventory.car_ammo)
     if carEntity_ammoInventory ~= nil and not carEntity_ammoInventory.is_empty() then
-        local carInWaterEntity_ammoInventory = carInWaterEntity.get_inventory(defines.inventory.car_ammo) ---@cast carInWaterEntity_ammoInventory - nil # if the real carEntity has an inventory so will the water copy of it.
+        local carInWaterEntity_ammoInventory = carInWaterEntity.get_inventory(defines.inventory.car_ammo) ---@cast carInWaterEntity_ammoInventory - nil # If the real carEntity has an inventory so will the water copy of it.
         ---@type uint
         for stackIndex = 1, #carEntity_ammoInventory do
             carEntity_ammoInventory[stackIndex].swap_stack(carInWaterEntity_ammoInventory[stackIndex])
@@ -249,13 +249,13 @@ DrivenCar.HitWater = function(carEntity, speed, position, surface)
     -- Explicitly kick any players out of the car and find them somewhere valid to stand, as by default they will end up inside the new car's collision box.
     local driver = carEntity.get_driver()
     if driver ~= nil then
-        carEntity.set_driver(nil) -- Must do this from car's view and not player.driving as that doesn't work.
-        --DrivenCar.PlacePreviousVehicleOccupantsNicely(driver, position, surface) -- If the water car has no collision box no need to move the auto placed character as it should be a sensible position already.
+        carEntity.set_driver(nil) -- Must do this from car's view and not player.driving as that doesn't get the driver out quick enough.
+        DrivenCar.PlacePreviousVehicleOccupantsNicely(driver, position, surface)
     end
     local passenger = carEntity.get_passenger()
     if passenger ~= nil then
-        carEntity.set_passenger(nil) -- Must do this from car's view and not player.driving as that doesn't work.
-        --DrivenCar.PlacePreviousVehicleOccupantsNicely(passenger, position, surface) -- If the water car has no collision box no need to move the auto placed character as it should be a sensible position already.
+        carEntity.set_passenger(nil) -- Must do this from car's view and not player.driving as that doesn't get the driver out quick enough.
+        DrivenCar.PlacePreviousVehicleOccupantsNicely(passenger, position, surface)
     end
 
     -- Remove the real vehicle.
@@ -265,7 +265,6 @@ DrivenCar.HitWater = function(carEntity, speed, position, surface)
     global.drivenCar.enteringWater[#global.drivenCar.enteringWater + 1] = { id = #global.drivenCar.enteringWater + 1, entity = carInWaterEntity, oldPosition = position, oldSpeedAbs = math.abs(speed) --[[@as float]] , speedPositive = speed > 0, orientation = orientation, surface = surface }
 end
 
---- FUTURE: not needed if the water car variant doesn't have any collision mask. But keep just in case for now.
 --- Place the previous occupant of a vehicle seat nicely. They will have already been ejected from the vehicle.
 ---@param seatOccupant LuaPlayer|LuaEntity
 ---@param vehiclePosition MapPosition
@@ -307,6 +306,7 @@ DrivenCar.CarContinuingToEnterWater = function(carEnteringWater)
     end
 
     -- Record the reduced speed for next tick. Reduce by the greater reduction between 33% of current or 0.02. Speed of 1 is 108km/h
+    -- FUTURE: this should probably account for the weight of the vehicle, so that a tank goes further than a car at the same speed.
     carEnteringWater.oldSpeedAbs = math.max(carEnteringWater.oldSpeedAbs - math.max(carEnteringWater.oldSpeedAbs / 3, 0.02), 0)
 
     if carEnteringWater.oldSpeedAbs > 0 then

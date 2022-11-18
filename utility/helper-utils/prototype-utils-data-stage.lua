@@ -228,35 +228,21 @@ PrototypeUtils.RemoveEntitiesRecipesFromTechnologies = function(entityPrototype,
     return technologiesChanged
 end
 
---- Doesn't handle mipmaps at all presently. Also ignores any of the extra data in an icons table of "Types/IconData". Think this should just duplicate the target icons table entry.
+--- Create a placement copy of the entity. The icon is only intended to distinguish it in the editor as it will never be seen in game.
+---
+--- Doesn't handle mipmaps at all presently in the icons data. The graphics of the entity is always just a cancel cross, as apart from odd manual testing it will never be seen in game.
 ---@param entityToClone Prototype.Entity
 ---@param newEntityName string
 ---@param subgroup string
 ---@param collisionMask CollisionMask
 ---@return Prototype.SimpleEntity
 PrototypeUtils.CreatePlacementTestEntityPrototype = function(entityToClone, newEntityName, subgroup, collisionMask)
-    local clonedIcon = entityToClone.icon
-    local clonedIconSize = entityToClone.icon_size
-    if clonedIcon == nil then
-        clonedIcon = entityToClone.icons[1].icon
-        clonedIconSize = entityToClone.icons[1].icon_size
-    end
     return {
         type = "simple-entity",
         name = newEntityName,
         subgroup = subgroup,
         order = "zzz",
-        icons = {
-            {
-                icon = clonedIcon,
-                icon_size = clonedIconSize
-            },
-            {
-                icon = "__core__/graphics/cancel.png",
-                icon_size = 64,
-                scale = (clonedIconSize / 64) * 0.5
-            }
-        },
+        icons = PrototypeUtils.AddLayerToCopyOfIcons(entityToClone, "__core__/graphics/cancel.png", 64, "front"),
         flags = entityToClone.flags,
         selection_box = entityToClone.selection_box,
         collision_box = entityToClone.collision_box,
@@ -267,6 +253,57 @@ PrototypeUtils.CreatePlacementTestEntityPrototype = function(entityToClone, newE
             width = 64
         }
     }
+end
+
+--- Add an icon image to either the front/back of an existing icon/icons reference. Intended to make generic copies of prototype icons for use in new prototype copies.
+---
+--- Doesn't blank out or modify the sourcePrototype.
+---@param sourcePrototype Prototype.Entity|Prototype.Item|Prototype.Recipe|Prototype.Technology|Prototype.VirtualSignal # Will work with any prototype that has the `icons` field. The main ones are currently listed here.
+---@param layerIcon string
+---@param layerSize int16
+---@param frontBack "front"|"back" # Where the extra layer should be added, the front or back of the current icons.
+---@return IconData[] icons
+PrototypeUtils.AddLayerToCopyOfIcons = function(sourcePrototype, layerIcon, layerSize, frontBack)
+    local iconSize = sourcePrototype.icon_size
+    if iconSize == nil then
+        iconSize = 0
+        local thisIconSize
+        for _, iconDetails in pairs(sourcePrototype.icons--[[@as IconData[] ]] ) do
+            thisIconSize = iconDetails.icon_size * (sourcePrototype.icons[1].scale or 1) --[[@as uint16]]
+            if thisIconSize > iconSize then
+                iconSize = thisIconSize
+            end
+        end
+    end
+    ---@type IconData[]
+    local newIcons = {}
+    if frontBack == "back" then
+        newIcons[#newIcons + 1] = {
+            icon = layerIcon,
+            icon_size = layerSize,
+            scale = (iconSize / layerSize) * 0.5
+        }
+    end
+    if sourcePrototype.icons ~= nil then
+        for _, iconDetails in pairs(sourcePrototype.icons--[[@as IconData[] ]] ) do
+            newIcons[#newIcons + 1] = TableUtils.DeepCopy(iconDetails)
+            newIcons[#newIcons].icon_size = newIcons[#newIcons].icon_size or iconSize -- If it was set at the top level before now set it at each layer as this is what we do for our own added layer.
+        end
+    else
+        newIcons[2] = {
+            icon = sourcePrototype.icon,
+            icon_size = iconSize
+        }
+    end
+    if frontBack == "front" then
+        newIcons[#newIcons + 1] = {
+            icon = layerIcon,
+            icon_size = layerSize,
+            scale = (iconSize / layerSize) * 0.5
+        }
+    end
+
+    return newIcons
 end
 
 --- Create a copy of a prototype that is used for just finding where it can be placed on land, ignoring any obstacles/entities on the land. Returns just a simple entity for this task.

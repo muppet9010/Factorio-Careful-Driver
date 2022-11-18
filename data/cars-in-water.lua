@@ -1,13 +1,12 @@
 --[[
     Create a copy of each `car` type that is non drivable for the stuck in water version.
 
-    Run in final fixes data stage in the hope I don't have to dependency on any other mods, as I don't want to change their prototypes, just make a copy of them.
-
-    -- TODO: Decide how I want to do the graphics. Could juts use the remnants model, or could make a custom version of the main model and just remove the lower parts of the graphics manually. But then need to do this for every custom car type as well...
+    Run in final fixes data stage in the hope I don't have to add any dependencies on other mods, as I don't want to change their prototypes, just make a copy of them.
 ]]
 
 local TableUtils = require("utility.helper-utils.table-utils")
 local Common = require("common")
+local PrototypeUtils = require("utility.helper-utils.prototype-utils-data-stage")
 
 local carsInWater = {} ---@type table<int, Prototype.Car>
 for _, carPrototype in pairs(data.raw["car"]) do
@@ -19,41 +18,25 @@ for _, carPrototype in pairs(data.raw["car"]) do
     waterVariant.allow_passengers = false
     waterVariant.localised_name = { "entity-name.careful_driver-vehicle_stuck_in_water", { "entity-name." .. originalName } }
     waterVariant.localised_description = { "entity-description.careful_driver-vehicle_stuck_in_water", { "entity-name." .. originalName } }
-    waterVariant.collision_mask = {} -- Have no collision mask so that as it skids to a halt in the water it doesn't damage anything.
     waterVariant.consumption = "0W" -- Vehicle is incapable of moving.
 
     -- Make the icon include a water background so its obvious in the editor.
-    -- TODO: check this works with something that uses `icons`, as vanilla vehicles use `icon`. Then push it to PrototypeUtils.CreatePlacementTestEntityPrototype() and maybe functionise it ?
-    local iconSize = waterVariant.icon_size
-    if iconSize == nil then
-        iconSize = 0
-        local thisIconSize
-        for _, iconDetails in pairs(waterVariant.icons--[[@as IconData[] ]] ) do
-            thisIconSize = iconDetails.icon_size * (waterVariant.icons[1].scale or 1) --[[@as uint16]]
-            if thisIconSize > iconSize then
-                iconSize = thisIconSize
-            end
+    waterVariant.icons = PrototypeUtils.AddLayerToCopyOfIcons(carPrototype, "__base__/graphics/terrain/water/hr-water-o.png", 64, "back")
+    waterVariant.icon = nil -- Clear any old value. If it was present we incorporated it in to icons already.
+    waterVariant.icon_size = nil -- Clear any old value, we utilised it if it was set.
+
+    -- Use custom graphics if we have made them for this vehicle type, otherwise just use their regular graphics.
+    -- FUTURE: not used at present as it looks odd when partially on ground still.
+    --[[if carPrototype.name == "car" then
+        -- Only overwrite the main graphics. Leave everything else.
+        waterVariant.animation.layers[1] = waterVariant.animation.layers[1].hr_version
+        for _, stripe in pairs(waterVariant.animation.layers[1].stripes) do
+            stripe.filename = string.gsub(stripe.filename, "__base__", "__careful_driver__")
         end
-    end
-    ---@type IconData[]
-    local newIcons = {
-        {
-            icon = "__base__/graphics/terrain/water/hr-water-o.png",
-            icon_size = 64,
-            scale = (iconSize / 64) * 0.5
-        }
-    }
-    if waterVariant.icons ~= nil then
-        for _, iconDetails in pairs(waterVariant.icons--[[@as IconData[] ]] ) do
-            newIcons[#newIcons + 1] = iconDetails
-        end
-    else
-        newIcons[2] = {
-            icon = waterVariant.icon,
-            icon_size = iconSize
-        }
-    end
-    waterVariant.icons = newIcons
+    elseif carPrototype.name == "tank" then
+        -- DO IN FUTURE
+    end]]
+    -- Readme note: The graphics used for when road vehicles end up in the water have to be specifically made. Where these haven't been made for modded vehicles the regular vehicle graphic will be used instead.
 
     carsInWater[#carsInWater + 1] = waterVariant
 end

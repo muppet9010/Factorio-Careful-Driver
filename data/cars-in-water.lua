@@ -26,17 +26,32 @@ for _, carPrototype in pairs(data.raw["car"]) do
     waterVariant.icon_size = nil -- Clear any old value, we utilised it if it was set.
 
     -- Use custom graphics if we have made them for this vehicle type, otherwise just use their regular graphics.
-    -- FUTURE: not used at present as it looks odd when partially on ground still.
-    --[[if carPrototype.name == "car" then
-        -- Only overwrite the main graphics. Leave everything else.
+    if carPrototype.name == "car" then
+        -- Overwrite the main graphics.
         waterVariant.animation.layers[1] = waterVariant.animation.layers[1].hr_version
         for _, stripe in pairs(waterVariant.animation.layers[1].stripes) do
             stripe.filename = string.gsub(stripe.filename, "__base__", "__careful_driver__")
+            stripe.width_in_frames = 1
         end
+        waterVariant.animation.layers[1].width = 201
+        waterVariant.animation.layers[1].stripes = util.multiplystripes(2, waterVariant.animation.layers[1].stripes) -- cSpell:ignore multiplystripes #  Double up the stripe entries on our new graphics. As the entire prototype is setup as if there are 2 animation frames, but we only bothered to make 1 in our new file.
+
+        -- Overwrite the color mask graphics.
+        waterVariant.animation.layers[2] = waterVariant.animation.layers[2].hr_version
+        for _, stripe in pairs(waterVariant.animation.layers[2].stripes) do
+            stripe.filename = string.gsub(stripe.filename, "__base__", "__careful_driver__")
+        end
+
+        -- Undo the now un-needed doubled up elements.
+        --[[for _, layer in pairs(waterVariant.animation.layers) do
+            layer.frame_count = 1
+        end
+        waterVariant.light_animation.repeat_count = 1
+        waterVariant.light_animation.hr_version.repeat_count = 1]]
+
     elseif carPrototype.name == "tank" then
         -- DO IN FUTURE
-    end]]
-    -- Readme note: The graphics used for when road vehicles end up in the water have to be specifically made. Where these haven't been made for modded vehicles the regular vehicle graphic will be used instead.
+    end
 
     carsInWater[#carsInWater + 1] = waterVariant
 end

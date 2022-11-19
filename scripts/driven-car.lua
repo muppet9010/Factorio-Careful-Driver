@@ -196,6 +196,18 @@ end
 DrivenCar.HitWater = function(carEntity, speed, position, surface)
     local orientation = carEntity.orientation
 
+    -- Explicitly kick any players out of the car before we place the new one so that the game's natural placement logic can work. As having 2 cars on top of one another prevents this logic from working.
+    local driver = carEntity.get_driver()
+    if driver ~= nil then
+        carEntity.set_driver(nil) -- Must do this from car's view and not player.driving as that doesn't get the driver out quick enough.
+    end
+    local passenger = carEntity.get_passenger()
+    if passenger ~= nil then
+        carEntity.set_passenger(nil) -- Must do this from car's view and not player.driving as that doesn't get the driver out quick enough.
+    end
+
+    -- TODO: work out how much damage will be done by this crash (half as much as hitting other entities). If this would kill the car then use a car corpse for the entity moved and don't bother filling it up or emptying the old car.
+
     -- Place the stuck in water car where the real car was.
     local carInWaterEntity = surface.create_entity({ name = Common.GetCarInWaterName(carEntity.name), position = position, force = carEntity.force, player = carEntity.last_user, create_build_effect_smoke = false, raise_built = true })
     if carInWaterEntity == nil then error("failed to make car type in water") end
@@ -246,37 +258,11 @@ DrivenCar.HitWater = function(carEntity, speed, position, surface)
         end
     end
 
-    -- Explicitly kick any players out of the car and find them somewhere valid to stand, as by default they will end up inside the new car's collision box.
-    local driver = carEntity.get_driver()
-    if driver ~= nil then
-        carEntity.set_driver(nil) -- Must do this from car's view and not player.driving as that doesn't get the driver out quick enough.
-        DrivenCar.PlacePreviousVehicleOccupantsNicely(driver, position, surface)
-    end
-    local passenger = carEntity.get_passenger()
-    if passenger ~= nil then
-        carEntity.set_passenger(nil) -- Must do this from car's view and not player.driving as that doesn't get the driver out quick enough.
-        DrivenCar.PlacePreviousVehicleOccupantsNicely(passenger, position, surface)
-    end
-
     -- Remove the real vehicle.
     carEntity.destroy({ raise_destroy = true })
 
     -- The progression of the vehicle each tick will handle its initial movement and creation of water splash effects etc.
     global.drivenCar.enteringWater[#global.drivenCar.enteringWater + 1] = { id = #global.drivenCar.enteringWater + 1, entity = carInWaterEntity, oldPosition = position, oldSpeedAbs = math.abs(speed) --[[@as float]] , speedPositive = speed > 0, orientation = orientation, surface = surface }
-end
-
---- Place the previous occupant of a vehicle seat nicely. They will have already been ejected from the vehicle.
----@param seatOccupant LuaPlayer|LuaEntity
----@param vehiclePosition MapPosition
----@param vehicleSurface LuaSurface
-DrivenCar.PlacePreviousVehicleOccupantsNicely = function(seatOccupant, vehiclePosition, vehicleSurface)
-    local character = seatOccupant.is_player() and seatOccupant.character or seatOccupant
-    if character ~= nil then
-        local characterNewPosition = vehicleSurface.find_non_colliding_position(character.name, vehiclePosition, 10, 0.1, false)
-        if characterNewPosition ~= nil then
-            character.teleport(characterNewPosition)
-        end
-    end
 end
 
 --- Called each tick for a car that is entering the water currently.
@@ -293,6 +279,7 @@ DrivenCar.CarContinuingToEnterWater = function(carEnteringWater)
     carEnteringWater.oldPosition = newPosition
 
     -- Add a water splash at the front of the vehicle based on the speed.
+    -- TODO: when the car is going backwards these need creating at the rear of its orientation.
     local splashesToAdd = math.ceil(carEnteringWater.oldSpeedAbs / 0.05)
     for _ = 1, splashesToAdd do
         -- TODO: cache these details.

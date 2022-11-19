@@ -7,10 +7,13 @@ local Events = require("utility.manager-libraries.events")
 local EventScheduler = require("utility.manager-libraries.event-scheduler")
 local PositionUtils = require("utility.helper-utils.position-utils")
 local Common = require("common")
+local MathUtils = require("utility.helper-utils.math-utils")
+local PrototypeAttributes = require("utility.functions.prototype-attributes")
 
 --- The details about a moving player car we need to track.
 ---@class MovingCar
 ---@field entity LuaEntity
+---@field name string # Prototype name of the real car prototype.
 ---@field oldSpeed float
 ---@field oldPosition MapPosition
 ---@field oldSurface LuaSurface
@@ -23,6 +26,7 @@ local Common = require("common")
 ---@field oldPosition MapPosition
 ---@field orientation RealOrientation
 ---@field surface LuaSurface
+---@field name string # Prototype name of the car in water.
 
 DrivenCar.OnLoad = function()
     EventScheduler.RegisterScheduler()
@@ -54,7 +58,7 @@ DrivenCar.OnPlayerGotInCar = function(carEntity)
     end
 
     -- Record the initial details for the car.
-    global.drivenCar.movingCars[carEntity] = { entity = carEntity, oldSpeed = carEntity.speed, oldPosition = carEntity.position, oldSurface = carEntity.surface }
+    global.drivenCar.movingCars[carEntity] = { entity = carEntity, oldSpeed = carEntity.speed, oldPosition = carEntity.position, oldSurface = carEntity.surface, name = carEntity.name }
 end
 
 --- Called every tick to process any cars that are being tracked.
@@ -102,10 +106,10 @@ DrivenCar.CheckTrackedCars_EachTick = function(event)
         -- Current speed has reached 0.
 
         -- Check if the car has hit something to stop it.
-        carHitThing = DrivenCar.DidCarHitSomethingToStop(carEntity, movingCarDetails.oldPosition, movingCarDetails.oldSpeed, movingCarDetails.oldSurface)
+        carHitThing = DrivenCar.DidCarHitSomethingToStop(carEntity, movingCarDetails.oldPosition, movingCarDetails.oldSpeed, movingCarDetails.oldSurface, movingCarDetails.name)
         if carHitThing ~= "nothing" then
             if carHitThing == "water" then
-                DrivenCar.HitWater(carEntity, movingCarDetails.oldSpeed, movingCarDetails.oldPosition, movingCarDetails.oldSurface)
+                DrivenCar.HitWater(carEntity, movingCarDetails.oldSpeed, movingCarDetails.oldPosition, movingCarDetails.oldSurface, movingCarDetails.name)
 
                 -- Car is done, so no need to process it any further.
                 global.drivenCar.movingCars[carEntity] = nil
@@ -155,22 +159,23 @@ end
 ---@param oldPosition MapPosition
 ---@param oldSpeed double # will never be 0.
 ---@param surface LuaSurface
+---@param entityName string # Prototype name of the real car prototype.
 ---@return "water"|"void"|"cliff"|"nothing"
-DrivenCar.DidCarHitSomethingToStop = function(carEntity, oldPosition, oldSpeed, surface)
+DrivenCar.DidCarHitSomethingToStop = function(carEntity, oldPosition, oldSpeed, surface, entityName)
     -- Work out where the car would be if it had continued at its old speed from its old position on its current orientation.
     local futurePosition = PositionUtils.GetPositionForOrientationDistance(oldPosition, oldSpeed, carEntity.orientation)
 
     -- Entities are collided with by a vehicle on their collision box. While tiles are collided with by the vehicles position and which tile this lands on. This means we would collide with an entity prior to a tile.
 
     -- Detect if it was a tile we hit. This is easier to check so do it first.
-    -- TODO: can probably cache a lot of this once we get its name earlier in code. Not worth it unless we get lots of other attributes regularly.
     local futureTile = surface.get_tile(futurePosition--[[@as TilePosition]] )
-    local futureTile_prototype = futureTile.prototype
-    local carPrototypeCollidesWith = carEntity.prototype.collision_mask
-    for tileCollisionMask in pairs(futureTile_prototype.collision_mask) do
+    local futureTile_name = futureTile.name
+    local futureTile_layer = PrototypeAttributes.GetAttribute("tile", futureTile_name, "layer") --[[@as uint]]
+    local carPrototypeCollidesWith = PrototypeAttributes.GetAttribute("entity", entityName, "collision_mask") --[[@as CollisionMask]]
+    for tileCollisionMask in pairs(PrototypeAttributes.GetAttribute("tile", futureTile_name, "collision_mask")--[[@as CollisionMask]] ) do
         if carPrototypeCollidesWith[tileCollisionMask] ~= nil then
             -- Collision between car and tile has occurred.
-            local tileLayerGroup = futureTile_prototype.layer
+            local tileLayerGroup = futureTile_layer
             if tileLayerGroup == 1 then
                 -- layer_group of "zero"
                 return "void"
@@ -193,8 +198,17 @@ end
 ---@param speed float
 ---@param position MapPosition
 ---@param surface LuaSurface
-DrivenCar.HitWater = function(carEntity, speed, position, surface)
-    local orientation = carEntity.orientation
+---@param entityName string # Prototype name of the real car prototype.
+DrivenCar.HitWater = function(carEntity, speed, position, surface, entityName)
+    -- Work out how much damage will be done by this crash (half as much as hitting other entities) as crashing in to water is "gentle". The damage to be done is halved before any resistance is taken in to account.
+    local damageToCar = DrivenCar.CalculateCarImpactDamage(entityName, speed) / 2
+    local carsHealthBeforeCrash = carEntity.health
+    local damageDoneToCar = carEntity.damage(damageToCar, carEntity.force, "impact")
+    -- If the car is going to be killed by the damage it isn't done until later in the tick. So we have to manually check if the damage has killed the entity, as if it has the entities health wasn't reduced by the damage, it's just been marked as to-be-dead.
+    if carsHealthBeforeCrash <= damageDoneToCar then
+        -- Car was killed by the impact damage, so no need to handle it further.
+        return
+    end
 
     -- Explicitly kick any players out of the car before we place the new one so that the game's natural placement logic can work. As having 2 cars on top of one another prevents this logic from working.
     local driver = carEntity.get_driver()
@@ -206,13 +220,14 @@ DrivenCar.HitWater = function(carEntity, speed, position, surface)
         carEntity.set_passenger(nil) -- Must do this from car's view and not player.driving as that doesn't get the driver out quick enough.
     end
 
-    -- TODO: work out how much damage will be done by this crash (half as much as hitting other entities). If this would kill the car then use a car corpse for the entity moved and don't bother filling it up or emptying the old car.
-
     -- Place the stuck in water car where the real car was.
-    local carInWaterEntity = surface.create_entity({ name = Common.GetCarInWaterName(carEntity.name), position = position, force = carEntity.force, player = carEntity.last_user, create_build_effect_smoke = false, raise_built = true })
+    local carInWaterEntityName = Common.GetCarInWaterName(entityName)
+    local carInWaterOrientation = carEntity.orientation
+    local carInWaterEntity = surface.create_entity({ name = carInWaterEntityName, position = position, force = carEntity.force, player = carEntity.last_user, create_build_effect_smoke = false, raise_built = true })
     if carInWaterEntity == nil then error("failed to make car type in water") end
-    carInWaterEntity.orientation = orientation
+    carInWaterEntity.orientation = carInWaterOrientation
     carInWaterEntity.color = carEntity.color
+    carInWaterEntity.health = carEntity.health
 
     -- Transfer the main inventory across.
     local carEntity_mainInventory = carEntity.get_inventory(defines.inventory.car_trunk)
@@ -262,7 +277,7 @@ DrivenCar.HitWater = function(carEntity, speed, position, surface)
     carEntity.destroy({ raise_destroy = true })
 
     -- The progression of the vehicle each tick will handle its initial movement and creation of water splash effects etc.
-    global.drivenCar.enteringWater[#global.drivenCar.enteringWater + 1] = { id = #global.drivenCar.enteringWater + 1, entity = carInWaterEntity, oldPosition = position, oldSpeedAbs = math.abs(speed) --[[@as float]] , speedPositive = speed > 0, orientation = orientation, surface = surface }
+    global.drivenCar.enteringWater[#global.drivenCar.enteringWater + 1] = { id = #global.drivenCar.enteringWater + 1, entity = carInWaterEntity, oldPosition = position, oldSpeedAbs = math.abs(speed) --[[@as float]] , speedPositive = speed > 0, orientation = carInWaterOrientation, surface = surface, name = carInWaterEntityName }
 end
 
 --- Called each tick for a car that is entering the water currently.
@@ -272,23 +287,23 @@ DrivenCar.CarContinuingToEnterWater = function(carEnteringWater)
     -- Check the car in water entity hasn't been removed.
     if not carEnteringWater.entity.valid then return false end
 
+    -- Get the forwards moving orientation and then use the absolute speed when required with it.
+    local movingOrientation = carEnteringWater.speedPositive and carEnteringWater.orientation or MathUtils.LoopFloatValueWithinRange(carEnteringWater.orientation - 0.5, 0, 1) --[[@as RealOrientation]]
+
     -- Move the car based on the current speed.
-    local currentSpeed = carEnteringWater.speedPositive and carEnteringWater.oldSpeedAbs or -carEnteringWater.oldSpeedAbs
-    local newPosition = PositionUtils.GetPositionForOrientationDistance(carEnteringWater.oldPosition, currentSpeed, carEnteringWater.orientation)
+    local newPosition = PositionUtils.GetPositionForOrientationDistance(carEnteringWater.oldPosition, carEnteringWater.oldSpeedAbs, movingOrientation)
     carEnteringWater.entity.teleport(newPosition)
     carEnteringWater.oldPosition = newPosition
 
     -- Add a water splash at the front of the vehicle based on the speed.
-    -- TODO: when the car is going backwards these need creating at the rear of its orientation.
     local splashesToAdd = math.ceil(carEnteringWater.oldSpeedAbs / 0.05)
+    local boundingBox = PrototypeAttributes.GetAttribute("entity", carEnteringWater.name, "collision_box") --[[@as BoundingBox]]
     for _ = 1, splashesToAdd do
-        -- TODO: cache these details.
-        local boundingBox = carEnteringWater.entity.prototype.collision_box
         local offset = {
             x = (math.random() * (boundingBox.left_top.x - 1)) + ((boundingBox.right_bottom.x + 1) / 2),
             y = boundingBox.left_top.y - 0.5 -- Put this a bit in front of the vehicle.
         }
-        local waterSplashPosition = PositionUtils.RotateOffsetAroundPosition(carEnteringWater.orientation, offset, newPosition)
+        local waterSplashPosition = PositionUtils.RotateOffsetAroundPosition(movingOrientation, offset, newPosition)
         carEnteringWater.surface.create_entity({ name = "careful_driver-water_splash-off_grid", position = waterSplashPosition })
     end
 
@@ -301,6 +316,17 @@ DrivenCar.CarContinuingToEnterWater = function(carEnteringWater)
     else
         return false
     end
+end
+
+--- Work out how much damage the car should take from colliding with an indestructible entity.
+---@param carName string
+---@param speed float
+---@return float
+DrivenCar.CalculateCarImpactDamage = function(carName, speed)
+    -- This doesn't quite match base game logic, however we don't need to account for a vehicle accelerating from 0 in to something this tick or worry about it turning in to a target.
+    local remainingEnergy = speed * speed * PrototypeAttributes.GetAttribute("entity", carName, "weight") --[[@as double]]
+    local energyPerHitPoint = PrototypeAttributes.GetAttribute("entity", carName, "energy_per_hit_point") --[[@as double]]
+    return remainingEnergy / energyPerHitPoint --[[@as float]]
 end
 
 return DrivenCar

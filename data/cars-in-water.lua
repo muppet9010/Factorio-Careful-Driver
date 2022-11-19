@@ -27,7 +27,7 @@ for _, carPrototype in pairs(data.raw["car"]) do
 
     -- Use custom graphics if we have made them for this vehicle type, otherwise just use their regular graphics.
     if carPrototype.name == "car" then
-        -- Overwrite the main graphics.
+        -- Overwrite the main graphics. Have to update the graphic file attribute as I trimmed the image file as it had duplication.
         waterVariant.animation.layers[1] = waterVariant.animation.layers[1].hr_version
         for _, stripe in pairs(waterVariant.animation.layers[1].stripes) do
             stripe.filename = string.gsub(stripe.filename, "__base__", "__careful_driver__")
@@ -36,21 +36,17 @@ for _, carPrototype in pairs(data.raw["car"]) do
         waterVariant.animation.layers[1].width = 201
         waterVariant.animation.layers[1].stripes = util.multiplystripes(2, waterVariant.animation.layers[1].stripes) -- cSpell:ignore multiplystripes #  Double up the stripe entries on our new graphics. As the entire prototype is setup as if there are 2 animation frames, but we only bothered to make 1 in our new file.
 
-        -- Overwrite the color mask graphics.
+        -- Overwrite the color mask graphics. This is unhelpfully on a different sprite sheet layout so ended up doing all by hand a second time quickly as very easy for these.
         waterVariant.animation.layers[2] = waterVariant.animation.layers[2].hr_version
         for _, stripe in pairs(waterVariant.animation.layers[2].stripes) do
             stripe.filename = string.gsub(stripe.filename, "__base__", "__careful_driver__")
         end
 
-        -- Undo the now un-needed doubled up elements.
-        --[[for _, layer in pairs(waterVariant.animation.layers) do
-            layer.frame_count = 1
-        end
-        waterVariant.light_animation.repeat_count = 1
-        waterVariant.light_animation.hr_version.repeat_count = 1]]
-
+        -- Move the shadow up a bit as the water surface is higher up. Not perfect, but looks better than default shadow position. Really I need to modify the shadow sprites to make it proper.
+        waterVariant.animation.layers[3].shift[1] = waterVariant.animation.layers[3].shift[1] - 0.1
+        waterVariant.animation.layers[3].shift[2] = waterVariant.animation.layers[3].shift[2] - 0.2
     elseif carPrototype.name == "tank" then
-        -- DO IN FUTURE
+        -- TODO: DO IN FUTURE
     end
 
     carsInWater[#carsInWater + 1] = waterVariant

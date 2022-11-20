@@ -46,7 +46,7 @@ for _, carPrototype in pairs(data.raw["car"]) do
         waterVariant.animation.layers[3].shift[1] = waterVariant.animation.layers[3].shift[1] - 0.1
         waterVariant.animation.layers[3].shift[2] = waterVariant.animation.layers[3].shift[2] - 0.2
     elseif carPrototype.name == "tank" then
-        -- TODO: DO IN FUTURE
+        -- TODO: Need to make the graphics and then apply them here.
     end
 
     carsInWater[#carsInWater + 1] = waterVariant

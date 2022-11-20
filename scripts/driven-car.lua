@@ -28,6 +28,14 @@ local PrototypeAttributes = require("utility.functions.prototype-attributes")
 ---@field surface LuaSurface
 ---@field name string # Prototype name of the car in water.
 
+---@class CarEnteringVoid
+---@field id int
+---@field graphicId uint64
+---@field speedAbs float
+---@field speedPositive boolean
+---@field oldPosition MapPosition
+---@field oldScale double
+
 DrivenCar.OnLoad = function()
     EventScheduler.RegisterScheduler()
     EventScheduler.RegisterScheduledEventType("DrivenCar.CheckTrackedCars_EachTick", DrivenCar.CheckTrackedCars_EachTick)
@@ -41,6 +49,7 @@ DrivenCar.CreateGlobals = function()
     global.drivenCar = global.drivenCar or {} ---@class DrivenCar_Global
     global.drivenCar.movingCars = global.drivenCar.movingCars or {} ---@type table<LuaEntity, MovingCar> # Keyed by the vehicle entity.
     global.drivenCar.enteringWater = global.drivenCar.enteringWater or {} ---@type table<int, CarEnteringWater> # Keyed by a sequential integer number.
+    global.drivenCar.enteringVoid = global.drivenCar.enteringVoid or {} ---@type table<int, CarEnteringVoid> # Keyed by a sequential integer number.
 end
 
 DrivenCar.OnStartup = function()
@@ -115,7 +124,7 @@ DrivenCar.CheckTrackedCars_EachTick = function(event)
                 global.drivenCar.movingCars[carEntity] = nil
                 goto EndOfMovingCarDetailsLoop
             elseif carHitThing == "void" then
-                game.print("hit void tile")
+                DrivenCar.HitVoid(carEntity, movingCarDetails.oldSpeed, movingCarDetails.oldPosition, movingCarDetails.oldSurface, movingCarDetails.name)
 
                 -- Car is done, so no need to process it any further.
                 global.drivenCar.movingCars[carEntity] = nil
@@ -152,6 +161,13 @@ DrivenCar.CheckTrackedCars_EachTick = function(event)
             global.drivenCar.enteringWater[index] = nil
         end
     end
+
+    -- Progress any cars that are entering the void.
+    for index, carEnteringVoid in pairs(global.drivenCar.enteringVoid) do
+        if not DrivenCar.CarContinuingToEnterVoid(carEnteringVoid) then
+            global.drivenCar.enteringVoid[index] = nil
+        end
+    end
 end
 
 --- A car has just stopped, did it hit something?
@@ -170,20 +186,22 @@ DrivenCar.DidCarHitSomethingToStop = function(carEntity, oldPosition, oldSpeed, 
     -- Detect if it was a tile we hit. This is easier to check so do it first.
     local futureTile = surface.get_tile(futurePosition--[[@as TilePosition]] )
     local futureTile_name = futureTile.name
-    local futureTile_layer = PrototypeAttributes.GetAttribute("tile", futureTile_name, "layer") --[[@as uint]]
-    local carPrototypeCollidesWith = PrototypeAttributes.GetAttribute("entity", entityName, "collision_mask") --[[@as CollisionMask]]
-    for tileCollisionMask in pairs(PrototypeAttributes.GetAttribute("tile", futureTile_name, "collision_mask")--[[@as CollisionMask]] ) do
-        if carPrototypeCollidesWith[tileCollisionMask] ~= nil then
+    local futureTile_collidesMask = PrototypeAttributes.GetAttribute("tile", futureTile_name, "collision_mask") --[[@as CollisionMask]]
+    local carPrototype_collisionMask = PrototypeAttributes.GetAttribute("entity", entityName, "collision_mask") --[[@as CollisionMask]]
+    for tileCollisionMask in pairs(futureTile_collidesMask) do
+        if carPrototype_collisionMask[tileCollisionMask] ~= nil then
             -- Collision between car and tile has occurred.
-            local tileLayerGroup = futureTile_layer
-            if tileLayerGroup == 1 then
-                -- layer_group of "zero"
+
+            -- Use the collision layers to detect the tile type. Based on vanilla tiles, but should handle any modded ones as well.
+            if futureTile_collidesMask["ground-tile"] or futureTile_collidesMask["floor-layer"] or futureTile_collidesMask["object"] then
+                -- These are the layers vanilla out-of-map tiles have that waters don't.
                 return "void"
-            elseif tileLayerGroup == 2 or tileLayerGroup == 3 then
-                -- layer_group of "water"
+            elseif futureTile_collidesMask["water-tile"] or futureTile_collidesMask["item-layer"] or futureTile_collidesMask["resource-layer"] or futureTile_collidesMask["player-layer"] or futureTile_collidesMask["doodad-layer"] or futureTile_collidesMask["object-layer"] then
+                -- These are the layers vanilla water tile have across the walkable and non-walkable tile types.
                 return "water"
             else
-                error("a car has collided with a tile that isn't void or water...")
+                -- No idea so error.
+                error("a car has collided with a tile that isn't on the tile layer of void or water...")
             end
         end
     end
@@ -200,7 +218,7 @@ end
 ---@param surface LuaSurface
 ---@param entityName string # Prototype name of the real car prototype.
 DrivenCar.HitWater = function(carEntity, speed, position, surface, entityName)
-    -- Work out how much damage will be done by this crash (half as much as hitting other entities) as crashing in to water is "gentle". The damage to be done is halved before any resistance is taken in to account.
+    -- Work out how much damage will be done by this crash. Halve the impact damage amount as crashing in to water is "gentle". The damage to be done is halved before any resistance is taken in to account. So resistances then still get to reduce damage.
     local damageToCar = DrivenCar.CalculateCarImpactDamage(entityName, speed) / 2
     local carsHealthBeforeCrash = carEntity.health
     local damageDoneToCar = carEntity.damage(damageToCar, carEntity.force, "impact")
@@ -307,8 +325,8 @@ DrivenCar.CarContinuingToEnterWater = function(carEnteringWater)
         carEnteringWater.surface.create_entity({ name = "careful_driver-water_splash-off_grid", position = waterSplashPosition })
     end
 
-    -- Record the reduced speed for next tick. Reduce by the greater reduction between 33% of current or 0.02. Speed of 1 is 108km/h
-    -- FUTURE: this should probably account for the weight of the vehicle, so that a tank goes further than a car at the same speed.
+    -- Record the reduced speed for next tick. Reduce by the greater reduction between 33% of current or 0.02. Speed of 0.5 is 108km/h
+    -- TODO: this should probably account for the weight of the vehicle, so that a tank goes further than a car at the same speed. Base off car's distance as present value and then see how a tank ends up with nothing and weight applied. Car speed tested at is 0.5 which is half max car speed on dirt with solid fuel. So a tank should be tested at 0.25 as its max speed is roughly half a cars.
     carEnteringWater.oldSpeedAbs = math.max(carEnteringWater.oldSpeedAbs - math.max(carEnteringWater.oldSpeedAbs / 3, 0.02), 0)
 
     if carEnteringWater.oldSpeedAbs > 0 then
@@ -327,6 +345,71 @@ DrivenCar.CalculateCarImpactDamage = function(carName, speed)
     local remainingEnergy = speed * speed * PrototypeAttributes.GetAttribute("entity", carName, "weight") --[[@as double]]
     local energyPerHitPoint = PrototypeAttributes.GetAttribute("entity", carName, "energy_per_hit_point") --[[@as double]]
     return remainingEnergy / energyPerHitPoint --[[@as float]]
+end
+
+--- When a car has first hit void and stopped.
+---@param carEntity LuaEntity
+---@param speed float
+---@param position MapPosition
+---@param surface LuaSurface
+---@param entityName string # Prototype name of the real car prototype.
+DrivenCar.HitVoid = function(carEntity, speed, position, surface, entityName)
+    -- Explicitly kick any players out of the car before we do the void effect.
+    local driver = carEntity.get_driver()
+    if driver ~= nil then
+        carEntity.set_driver(nil) -- Must do this from car's view and not player.driving as that doesn't get the driver out quick enough.
+    end
+    local passenger = carEntity.get_passenger()
+    if passenger ~= nil then
+        carEntity.set_passenger(nil) -- Must do this from car's view and not player.driving as that doesn't get the driver out quick enough.
+    end
+
+    -- Create the visual of the vehicle.
+    local rotationNumber = DrivenCar.OrientationToRotation(carEntity.orientation)
+    local graphicId = rendering.draw_animation({ name = Common.GetCarInVoidName(entityName, rotationNumber), x_scale = 1.0, y_scale = 1.0, tint = carEntity.color, render_layer = "object", target = position, surface = surface })
+
+    -- Remove the real vehicle.
+    carEntity.destroy({ raise_destroy = true })
+
+    -- The progression of the vehicle each tick will handle its initial movement..
+    global.drivenCar.enteringVoid[#global.drivenCar.enteringVoid + 1] = { id = #global.drivenCar.enteringVoid + 1, oldPosition = position, speedAbs = math.abs(speed) --[[@as float]] , speedPositive = speed > 0, graphicId = graphicId, oldScale = 1 }
+end
+
+--- Called each tick for a car that is entering the void currently.
+---@param carEnteringVoid CarEnteringVoid
+---@return boolean continueMovingCar
+DrivenCar.CarContinuingToEnterVoid = function(carEnteringVoid)
+    -- TODO: Continue moving the car forward at its speed for 1 tile and then have it stop. It can shrink during this time and afterwards.
+
+    -- Testing code, but right concept.
+    local newScale = carEnteringVoid.oldScale - 0.01
+    if newScale == 0 then
+        -- Reached end of vanishing.
+        rendering.destroy(carEnteringVoid.graphicId)
+        return false
+    end
+
+    local newPosition = carEnteringVoid.oldPosition
+    newPosition.x = newPosition.x + 0.1
+
+    rendering.set_target(carEnteringVoid.graphicId, newPosition)
+    rendering.set_x_scale(carEnteringVoid.graphicId, newScale)
+    rendering.set_y_scale(carEnteringVoid.graphicId, newScale)
+
+    carEnteringVoid.oldScale = newScale
+    carEnteringVoid.oldPosition = newPosition
+
+    return true
+end
+
+--- Get a rotation number from an orientation value. We assume all cars have the full 64 rotations.
+---@param orientation RealOrientation
+---@return uint rotationNumber # 1-64
+DrivenCar.OrientationToRotation = function(orientation)
+    local upperOrientation = orientation + 0.0078125 -- Half of the orientation per rotation. This is to get us up to the upper band as 0 is actually the middle of the first rotation.
+    local rotation = math.floor(upperOrientation / 0.015625) + 1 --[[@as uint]]
+    if rotation == 65 then rotation = 1 end -- To catch the upper bound of orientation.
+    return rotation
 end
 
 return DrivenCar

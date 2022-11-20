@@ -10,6 +10,9 @@ local PrototypeUtils = require("utility.helper-utils.prototype-utils-data-stage"
 
 local carsInWater = {} ---@type table<int, Prototype.Car>
 for _, carPrototype in pairs(data.raw["car"]) do
+    -- Skip any vehicles from our mod.
+    if string.find(carPrototype.name, "careful_driver-", 1, true) then goto EndOfCarPrototype end
+
     local waterVariant = TableUtils.DeepCopy(carPrototype) ---@type Prototype.Car
     local originalName = waterVariant.name
 
@@ -50,6 +53,8 @@ for _, carPrototype in pairs(data.raw["car"]) do
     end
 
     carsInWater[#carsInWater + 1] = waterVariant
+
+    ::EndOfCarPrototype::
 end
 
 data:extend(carsInWater)

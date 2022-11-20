@@ -366,7 +366,7 @@ DrivenCar.HitVoid = function(carEntity, speed, position, surface, entityName)
 
     -- Create the visual of the vehicle.
     local rotationNumber = DrivenCar.OrientationToRotation(carEntity.orientation)
-    local graphicId = rendering.draw_animation({ name = Common.GetCarInVoidName(entityName, rotationNumber), x_scale = 1.0, y_scale = 1.0, tint = carEntity.color, render_layer = "object", target = position, surface = surface })
+    local graphicId = rendering.draw_animation({ animation = Common.GetCarInVoidName(entityName, rotationNumber), x_scale = 1.0, y_scale = 1.0, tint = carEntity.color, render_layer = "object", target = position, surface = surface })
 
     -- Remove the real vehicle.
     carEntity.destroy({ raise_destroy = true })
@@ -383,7 +383,7 @@ DrivenCar.CarContinuingToEnterVoid = function(carEnteringVoid)
 
     -- Testing code, but right concept.
     local newScale = carEnteringVoid.oldScale - 0.01
-    if newScale == 0 then
+    if newScale <= 0 then -- Do 0 or less as due to rounding issues the result may not actually ever be exactly 0.
         -- Reached end of vanishing.
         rendering.destroy(carEnteringVoid.graphicId)
         return false

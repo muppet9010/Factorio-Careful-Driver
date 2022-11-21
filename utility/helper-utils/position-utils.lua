@@ -2,7 +2,7 @@
     All position concept related utils functions, including bounding boxes.
 
     Future Tasks:
-        - In the past I haven't had to deal with complicated orientated bounding boxes in detail, at most I just passed them back in to Factorio via na API call. This means there are a number of limitations that I've found when trying to do detailed BoundingBox work:
+        - In the past I haven't had to deal with complicated orientated bounding boxes in detail, at most I just passed them back in to Factorio via na API call. Factorio API doesn't accept orientation on its BoundingBox specifications when we pass them in to the game via API. This is likely why we don't handle it in the past. This needs to be clearly defined and born in mind when adding documentation and enhancements. This means there are a number of limitations that I've found when trying to do detailed BoundingBox work:
             - All of these functions that return a BoundingBox lose any passed in orientation value.
             - Many of the functions ignore orientation, either explicitly or implicitly. Some handle it in specific listed ways.
 ]]
@@ -557,25 +557,23 @@ PositionUtils.FindWhereLineCrossesCircle = function(radius, slope, yIntercept)
     end
 end
 
---- See if 2 BoundingBoxes collide with each other.
+--- See if 2 polygons collide with each other.
 ---
 --- Code from: https://stackoverflow.com/a/10965077
----@param boundingBox1 BoundingBox
----@param boundingBox2 BoundingBox
+---@param polygonAPoints MapPosition[]
+---@param polygonBPoints MapPosition[]
 ---@return boolean boundingBoxesCollide
-PositionUtils.Do2RotatedBoundingBoxesCollide = function(boundingBox1, boundingBox2)
-    --TODO: this doesn't work as the bounding box passed in actually needs its center finding and then each position rotated around this. As a 0.75 orientation bounding box of a non square shape doesn't get the thin and thick corners right.
-    for _, boundingBox in pairs({ boundingBox1, boundingBox2 }) do
-        for i1 = 0, 3 do
-            local i2 = (i1 + 1) % 4
-            local p1 = PositionUtils.GetNumberedMapPositionFromBoundingBox(boundingBox, i1)
-            local p2 = PositionUtils.GetNumberedMapPositionFromBoundingBox(boundingBox, i2)
+PositionUtils.Do2RotatedBoundingBoxesCollide = function(polygonAPoints, polygonBPoints)
+    for _, polygon in pairs({ polygonAPoints, polygonBPoints }) do
+        for i1 = 1, #polygon do
+            local i2 = (i1 % #polygon) + 1
+            local p1 = polygon[i1]
+            local p2 = polygon[i2]
 
             local normal = { x = p2.y - p1.y, y = p1.x - p2.x } --[[@as MapPosition]]
 
             local minA, maxA
-            for boundingBox1_pointCount = 0, 3 do
-                local p = PositionUtils.GetNumberedMapPositionFromBoundingBox(boundingBox1, boundingBox1_pointCount)
+            for _, p in pairs(polygonAPoints) do
                 local projected = normal.x * p.x + normal.y * p.y
                 if (minA == nil or projected < minA) then
                     minA = projected
@@ -586,8 +584,7 @@ PositionUtils.Do2RotatedBoundingBoxesCollide = function(boundingBox1, boundingBo
             end
 
             local minB, maxB
-            for boundingBox2_pointCount = 0, 3 do
-                local p = PositionUtils.GetNumberedMapPositionFromBoundingBox(boundingBox2, boundingBox2_pointCount)
+            for _, p in pairs(polygonBPoints) do
                 local projected = normal.x * p.x + normal.y * p.y
                 if (minB == nil or projected < minB) then
                     minB = projected
@@ -605,23 +602,36 @@ PositionUtils.Do2RotatedBoundingBoxesCollide = function(boundingBox1, boundingBo
     return true
 end
 
---- Get a numbered corner MapPosition from a bounding box.
+--- Get an array of MapPosition points from a collision box at a given position, handles all orientations.
+---@param collisionBox BoundingBox
+---@param centerPosition MapPosition
+---@param orientation RealOrientation
+---@return MapPosition[]
+PositionUtils.MakePolygonMapPointsFromOrientatedCollisionBox = function(collisionBox, orientation, centerPosition)
+    local polygon = {} ---@type MapPosition[]
+
+    polygon[1] = PositionUtils.RotateOffsetAroundPosition(orientation, collisionBox.left_top, centerPosition)
+    polygon[2] = PositionUtils.RotateOffsetAroundPosition(orientation, { x = collisionBox.right_bottom.x, y = collisionBox.left_top.y }, centerPosition)
+    polygon[3] = PositionUtils.RotateOffsetAroundPosition(orientation, collisionBox.right_bottom, centerPosition)
+    polygon[4] = PositionUtils.RotateOffsetAroundPosition(orientation, { x = collisionBox.left_top.x, y = collisionBox.right_bottom.y }, centerPosition)
+
+    return polygon
+end
+
+--- Get an array of MapPosition points from a bounding box (positioned collision box) at a given position, handles all orientations.
 ---@param boundingBox BoundingBox
----@param pointNumber int # 0-3
----@return MapPosition
-PositionUtils.GetNumberedMapPositionFromBoundingBox = function(boundingBox, pointNumber)
-    --TODO: just used by PositionUtils.Do2RotatedBoundingBoxesCollide() so can be changed as needed.
-    if pointNumber == 0 then
-        return boundingBox.left_top
-    elseif pointNumber == 1 then
-        return { x = boundingBox.right_bottom.x, y = boundingBox.left_top.y }
-    elseif pointNumber == 2 then
-        return boundingBox.right_bottom
-    elseif pointNumber == 3 then
-        return { x = boundingBox.left_top.x, y = boundingBox.right_bottom.y }
-    else
-        error("no 5th point in a BoundingBox")
-    end
+---@param centerPosition MapPosition
+---@param orientation RealOrientation
+---@return MapPosition[]
+PositionUtils.MakePolygonMapPointsFromOrientatedBoundingBox = function(boundingBox, orientation, centerPosition)
+    local polygon = {} ---@type MapPosition[]
+
+    polygon[1] = PositionUtils.RotateOffsetAroundPosition(orientation, { x = boundingBox.left_top.x - centerPosition.x, y = boundingBox.left_top.y - centerPosition.y }, centerPosition)
+    polygon[2] = PositionUtils.RotateOffsetAroundPosition(orientation, { x = boundingBox.right_bottom.x - centerPosition.x, y = boundingBox.left_top.y - centerPosition.y }, centerPosition)
+    polygon[3] = PositionUtils.RotateOffsetAroundPosition(orientation, { x = boundingBox.right_bottom.x - centerPosition.x, y = boundingBox.right_bottom.y - centerPosition.y }, centerPosition)
+    polygon[4] = PositionUtils.RotateOffsetAroundPosition(orientation, { x = boundingBox.left_top.x - centerPosition.x, y = boundingBox.right_bottom.y - centerPosition.y }, centerPosition)
+
+    return polygon
 end
 
 --- Check if a position is within a circles area.

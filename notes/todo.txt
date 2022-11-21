@@ -1,0 +1,1 @@
+- When I do my effects over ticks I need to check the effect entity still exists. As the game could be saved/loaded and the reference modded vehicle removed, this my prototype wouldn't be created.

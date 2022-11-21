@@ -3,7 +3,6 @@
 ]]
 
 local DrivenCar = {} ---@class DrivenCar
-local Events = require("utility.manager-libraries.events")
 local EventScheduler = require("utility.manager-libraries.event-scheduler")
 local PositionUtils = require("utility.helper-utils.position-utils")
 local Common = require("common")
@@ -219,12 +218,14 @@ DrivenCar.DidCarHitSomethingToStop = function(carEntity, oldPosition, oldSpeed, 
     end
 
     -- See if it stopped from hitting a cliff in its travelling direction.
+    -- CODE NOTE: Factorio doesn't support us passing in an orientation as part of a BoundingBox to any of its API functions, so we have to do it as a square area and then manually check any results for diagonal collisions.
     local carsCollisionBox = PrototypeAttributes.GetAttribute("entity", entityName, "collision_box") --[[@as BoundingBox]]
+    -- Get the front edge of the car as we will need to check for any cliffs in this width. Add 10% as the car may have been turning at the point and so it will be slightly wider on that side. At worst this would just find a cliff beyond our own collision box and we will check each result anyways.
     local frontBoundingBoxEdgeDistance
     if oldSpeed > 0 then
-        frontBoundingBoxEdgeDistance = -carsCollisionBox.left_top.y
+        frontBoundingBoxEdgeDistance = -carsCollisionBox.left_top.y * 1.1
     else
-        frontBoundingBoxEdgeDistance = carsCollisionBox.right_bottom.y
+        frontBoundingBoxEdgeDistance = carsCollisionBox.right_bottom.y * 1.1
     end
     local vehicleWidth = carsCollisionBox.right_bottom.x - carsCollisionBox.left_top.x
     local futureFrontBoundingBoxCenter = PositionUtils.GetPositionForOrientationDistance(futurePosition, frontBoundingBoxEdgeDistance, orientation)
@@ -235,16 +236,14 @@ DrivenCar.DidCarHitSomethingToStop = function(carEntity, oldPosition, oldSpeed, 
     if #cliffsAroundFutureFrontEdge > 0 then
         -- Cliffs found to check
 
-        -- TODO: At present this doesn't work -  maybe we should pass in a table of 4 corner positions of each entity. These need to be generated from the car's position and its collision box, plus the orientation. This would replace getting the bounding_box field as we'd need to generate its corner positions based on orientation anyways, but we'd have to work out the center position to then rotate them around.
-
-        -- Get the car's bounding box and then move it based on speed and orientation.
-        -- CODE NOTE: had to add quite a big boost to speed as somehow the base game is detecting the collision much earlier than I seems able too.
-        local futureCarBoundingBox = PositionUtils.ApplyOffsetToBoundingBox(carEntity.bounding_box, PositionUtils.GetPositionForOrientationDistance({ x = 0, y = 0 }, oldSpeed, orientation))
-        futureCarBoundingBox.orientation = orientation
+        -- Get the car's future bounding box, but as a Polygon of MapPositions for later manual comparison.
+        local futureCarCollisionPolygon = PositionUtils.MakePolygonMapPointsFromOrientatedCollisionBox(carsCollisionBox, orientation, futurePosition)
 
         -- Check each cliff for if it collides with the car.
         for _, cliffEntity in pairs(cliffsAroundFutureFrontEdge) do
-            if PositionUtils.Do2RotatedBoundingBoxesCollide(futureCarBoundingBox, cliffEntity.bounding_box) then
+            -- Have to use the bounding box as the different cliff-orientations have different collision boxes, but these aren't accessible via the entities prototype.
+            local cliffCollisionPolygon = PositionUtils.MakePolygonMapPointsFromOrientatedBoundingBox(cliffEntity.bounding_box, cliffEntity.orientation, cliffEntity.position)
+            if PositionUtils.Do2RotatedBoundingBoxesCollide(futureCarCollisionPolygon, cliffCollisionPolygon) then
                 return "cliff"
             end
         end

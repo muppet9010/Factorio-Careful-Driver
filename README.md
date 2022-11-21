@@ -26,6 +26,8 @@ Future Ideas
 ------------
 
 - Players can walk in to the water or void and treated similar to how vehicles are currently.
+- Players appear to stay in the water/void vehicle for a few seconds until the effect finishes, then get ejected. Will need to be done in a way that doesn't confuse other mods in to thinking the player died. Mod option for if players are ejected from void entering cars or not.
+- Mod options for if items in vehicle/player are lost on relevant effects (entering void/water).
 - Trains that are driven to the end of a rail track will derail.
 - Add mod settings to disable features, by default all will be on at present.
 - Trains won't stop instantly when they loose their path. Instead they will have to slow down at their max breaking speed. This will take effect when a player messes with a trains orders while its moving or removes rail track in a rail network.

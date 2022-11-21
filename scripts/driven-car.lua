@@ -35,6 +35,8 @@ local PrototypeAttributes = require("utility.functions.prototype-attributes")
 ---@field speedPositive boolean
 ---@field oldPosition MapPosition
 ---@field oldScale double
+---@field distanceToFallPosition double # How far the target needs to move to reach where it will just fall straight down.
+---@field orientation RealOrientation
 
 DrivenCar.OnLoad = function()
     EventScheduler.RegisterScheduler()
@@ -115,6 +117,7 @@ DrivenCar.CheckTrackedCars_EachTick = function(event)
         -- Current speed has reached 0.
 
         -- Check if the car has hit something to stop it.
+        -- CODE NOTE: As the car has 0 speed this tick, it hasn't moved from its last tick position. So some of the cached data remains unchanged (position) that wouldn't if the car was still moving.
         carHitThing = DrivenCar.DidCarHitSomethingToStop(carEntity, movingCarDetails.oldPosition, movingCarDetails.oldSpeed, movingCarDetails.oldSurface, movingCarDetails.name)
         if carHitThing ~= "nothing" then
             if carHitThing == "water" then
@@ -130,7 +133,14 @@ DrivenCar.CheckTrackedCars_EachTick = function(event)
                 global.drivenCar.movingCars[carEntity] = nil
                 goto EndOfMovingCarDetailsLoop
             elseif carHitThing == "cliff" then
-                game.print("hit cliff entity")
+                -- Work out how much damage will be done by this crash. Do at full impact damage bouncing back to the vehicle as cliffs aren't soft.
+                local damageToCar = DrivenCar.CalculateCarImpactDamage(movingCarDetails.name, movingCarDetails.oldSpeed)
+                carEntity.damage(damageToCar, carEntity.force, "impact")
+                if not carEntity.valid then
+                    -- Car was killed by the impact damage, so no need to handle it further.
+                    global.drivenCar.movingCars[carEntity] = nil
+                    goto EndOfMovingCarDetailsLoop
+                end
 
                 -- Car stopped, but needs to continue being monitored in future ticks.
                 goto UpdateCarDataInMovingCarDetailsLoop
@@ -178,8 +188,10 @@ end
 ---@param entityName string # Prototype name of the real car prototype.
 ---@return "water"|"void"|"cliff"|"nothing"
 DrivenCar.DidCarHitSomethingToStop = function(carEntity, oldPosition, oldSpeed, surface, entityName)
+    local orientation = carEntity.orientation
+
     -- Work out where the car would be if it had continued at its old speed from its old position on its current orientation.
-    local futurePosition = PositionUtils.GetPositionForOrientationDistance(oldPosition, oldSpeed, carEntity.orientation)
+    local futurePosition = PositionUtils.GetPositionForOrientationDistance(oldPosition, oldSpeed, orientation)
 
     -- Entities are collided with by a vehicle on their collision box. While tiles are collided with by the vehicles position and which tile this lands on. This means we would collide with an entity prior to a tile.
 
@@ -206,7 +218,37 @@ DrivenCar.DidCarHitSomethingToStop = function(carEntity, oldPosition, oldSpeed, 
         end
     end
 
-    -- FUTURE: detecting cliff collisions will require handling odd orientation collision boxes.
+    -- See if it stopped from hitting a cliff in its travelling direction.
+    local carsCollisionBox = PrototypeAttributes.GetAttribute("entity", entityName, "collision_box") --[[@as BoundingBox]]
+    local frontBoundingBoxEdgeDistance
+    if oldSpeed > 0 then
+        frontBoundingBoxEdgeDistance = -carsCollisionBox.left_top.y
+    else
+        frontBoundingBoxEdgeDistance = carsCollisionBox.right_bottom.y
+    end
+    local vehicleWidth = carsCollisionBox.right_bottom.x - carsCollisionBox.left_top.x
+    local futureFrontBoundingBoxCenter = PositionUtils.GetPositionForOrientationDistance(futurePosition, frontBoundingBoxEdgeDistance, orientation)
+    -- Do an area search as we want to check cliff collision boxes and not for their center.
+    ---@type BoundingBox
+    local searchArea = { left_top = { x = futureFrontBoundingBoxCenter.x - vehicleWidth, y = futureFrontBoundingBoxCenter.y - vehicleWidth }, right_bottom = { x = futureFrontBoundingBoxCenter.x + vehicleWidth, y = futureFrontBoundingBoxCenter.y + vehicleWidth } }
+    local cliffsAroundFutureFrontEdge = surface.find_entities_filtered({ type = "cliff", area = searchArea })
+    if #cliffsAroundFutureFrontEdge > 0 then
+        -- Cliffs found to check
+
+        -- TODO: At present this doesn't work -  maybe we should pass in a table of 4 corner positions of each entity. These need to be generated from the car's position and its collision box, plus the orientation. This would replace getting the bounding_box field as we'd need to generate its corner positions based on orientation anyways, but we'd have to work out the center position to then rotate them around.
+
+        -- Get the car's bounding box and then move it based on speed and orientation.
+        -- CODE NOTE: had to add quite a big boost to speed as somehow the base game is detecting the collision much earlier than I seems able too.
+        local futureCarBoundingBox = PositionUtils.ApplyOffsetToBoundingBox(carEntity.bounding_box, PositionUtils.GetPositionForOrientationDistance({ x = 0, y = 0 }, oldSpeed, orientation))
+        futureCarBoundingBox.orientation = orientation
+
+        -- Check each cliff for if it collides with the car.
+        for _, cliffEntity in pairs(cliffsAroundFutureFrontEdge) do
+            if PositionUtils.Do2RotatedBoundingBoxesCollide(futureCarBoundingBox, cliffEntity.bounding_box) then
+                return "cliff"
+            end
+        end
+    end
 
     return "nothing"
 end
@@ -220,10 +262,8 @@ end
 DrivenCar.HitWater = function(carEntity, speed, position, surface, entityName)
     -- Work out how much damage will be done by this crash. Halve the impact damage amount as crashing in to water is "gentle". The damage to be done is halved before any resistance is taken in to account. So resistances then still get to reduce damage.
     local damageToCar = DrivenCar.CalculateCarImpactDamage(entityName, speed) / 2
-    local carsHealthBeforeCrash = carEntity.health
-    local damageDoneToCar = carEntity.damage(damageToCar, carEntity.force, "impact")
-    -- If the car is going to be killed by the damage it isn't done until later in the tick. So we have to manually check if the damage has killed the entity, as if it has the entities health wasn't reduced by the damage, it's just been marked as to-be-dead.
-    if carsHealthBeforeCrash <= damageDoneToCar then
+    carEntity.damage(damageToCar, carEntity.force, "impact")
+    if not carEntity.valid then
         -- Car was killed by the impact damage, so no need to handle it further.
         return
     end
@@ -325,9 +365,10 @@ DrivenCar.CarContinuingToEnterWater = function(carEnteringWater)
         carEnteringWater.surface.create_entity({ name = "careful_driver-water_splash-off_grid", position = waterSplashPosition })
     end
 
-    -- Record the reduced speed for next tick. Reduce by the greater reduction between 33% of current or 0.02. Speed of 0.5 is 108km/h
-    -- TODO: this should probably account for the weight of the vehicle, so that a tank goes further than a car at the same speed. Base off car's distance as present value and then see how a tank ends up with nothing and weight applied. Car speed tested at is 0.5 which is half max car speed on dirt with solid fuel. So a tank should be tested at 0.25 as its max speed is roughly half a cars.
-    carEnteringWater.oldSpeedAbs = math.max(carEnteringWater.oldSpeedAbs - math.max(carEnteringWater.oldSpeedAbs / 3, 0.02), 0)
+    -- Record the reduced speed for next tick. Reduce by the greater reduction between 1/6 of current speed or 0.02. Speed of 0.5 is 108km/h
+    -- We don't include the vehicles weight as the variation between a car and tank is huge. And a logarithmic approach would have no real affect on similar weighted vehicles.
+    local speedReduction = math.max(carEnteringWater.oldSpeedAbs / 6, 0.02)
+    carEnteringWater.oldSpeedAbs = math.max(carEnteringWater.oldSpeedAbs - speedReduction, 0)
 
     if carEnteringWater.oldSpeedAbs > 0 then
         return true
@@ -368,20 +409,20 @@ DrivenCar.HitVoid = function(carEntity, speed, position, surface, entityName)
     local rotationNumber = DrivenCar.OrientationToRotation(carEntity.orientation)
     local graphicId = rendering.draw_animation({ animation = Common.GetCarInVoidName(entityName, rotationNumber), x_scale = 1.0, y_scale = 1.0, tint = carEntity.color, render_layer = "object", target = position, surface = surface })
 
+    local orientation = carEntity.orientation
+
     -- Remove the real vehicle.
     carEntity.destroy({ raise_destroy = true })
 
-    -- The progression of the vehicle each tick will handle its initial movement..
-    global.drivenCar.enteringVoid[#global.drivenCar.enteringVoid + 1] = { id = #global.drivenCar.enteringVoid + 1, oldPosition = position, speedAbs = math.abs(speed) --[[@as float]] , speedPositive = speed > 0, graphicId = graphicId, oldScale = 1 }
+    -- The progression of the vehicle each tick will handle its initial movement.
+    global.drivenCar.enteringVoid[#global.drivenCar.enteringVoid + 1] = { id = #global.drivenCar.enteringVoid + 1, oldPosition = position, speedAbs = math.abs(speed) --[[@as float]] , speedPositive = speed > 0, graphicId = graphicId, oldScale = 1, distanceToFallPosition = 1.5, orientation = orientation }
 end
 
 --- Called each tick for a car that is entering the void currently.
 ---@param carEnteringVoid CarEnteringVoid
 ---@return boolean continueMovingCar
 DrivenCar.CarContinuingToEnterVoid = function(carEnteringVoid)
-    -- TODO: Continue moving the car forward at its speed for 1 tile and then have it stop. It can shrink during this time and afterwards.
-
-    -- Testing code, but right concept.
+    -- Reduce the scale steadily.
     local newScale = carEnteringVoid.oldScale - 0.01
     if newScale <= 0 then -- Do 0 or less as due to rounding issues the result may not actually ever be exactly 0.
         -- Reached end of vanishing.
@@ -389,15 +430,18 @@ DrivenCar.CarContinuingToEnterVoid = function(carEnteringVoid)
         return false
     end
 
-    local newPosition = carEnteringVoid.oldPosition
-    newPosition.x = newPosition.x + 0.1
-
-    rendering.set_target(carEnteringVoid.graphicId, newPosition)
     rendering.set_x_scale(carEnteringVoid.graphicId, newScale)
     rendering.set_y_scale(carEnteringVoid.graphicId, newScale)
-
     carEnteringVoid.oldScale = newScale
-    carEnteringVoid.oldPosition = newPosition
+
+    if carEnteringVoid.distanceToFallPosition > 0 then
+        local newSpeedAbs = math.min(math.max(carEnteringVoid.speedAbs * 0.6, 0.05), carEnteringVoid.distanceToFallPosition)
+        local newPosition = PositionUtils.GetPositionForOrientationDistance(carEnteringVoid.oldPosition, carEnteringVoid.speedPositive and newSpeedAbs or -newSpeedAbs, carEnteringVoid.orientation)
+        rendering.set_target(carEnteringVoid.graphicId, newPosition)
+        carEnteringVoid.oldPosition = newPosition
+        carEnteringVoid.speedAbs = newSpeedAbs
+        carEnteringVoid.distanceToFallPosition = carEnteringVoid.distanceToFallPosition - newSpeedAbs
+    end
 
     return true
 end

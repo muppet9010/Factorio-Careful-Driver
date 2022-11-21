@@ -1,5 +1,10 @@
 --[[
     All position concept related utils functions, including bounding boxes.
+
+    Future Tasks:
+        - In the past I haven't had to deal with complicated orientated bounding boxes in detail, at most I just passed them back in to Factorio via na API call. This means there are a number of limitations that I've found when trying to do detailed BoundingBox work:
+            - All of these functions that return a BoundingBox lose any passed in orientation value.
+            - Many of the functions ignore orientation, either explicitly or implicitly. Some handle it in specific listed ways.
 ]]
 --
 
@@ -160,7 +165,7 @@ PositionUtils.GetLeftTopTilePositionForChunkPosition = function(chunkPos)
     return { x = chunkPos.x * 32, y = chunkPos.y * 32 }
 end
 
---- Rotates an offset around position of {0,0}.
+--- Create a new position at a rotated offset around position of {0,0}.
 ---@param orientation RealOrientation
 ---@param position MapPosition
 ---@return MapPosition
@@ -194,7 +199,7 @@ PositionUtils.RotatePositionAround0 = function(orientation, position)
     return { x = rotatedX, y = rotatedY }
 end
 
---- Rotates an offset around a position. Combines PositionUtils.RotatePositionAround0() and PositionUtils.ApplyOffsetToPosition() to save UPS.
+--- Create a new position at a rotated offset to an existing position. Rotates an offset around a position. Combines PositionUtils.RotatePositionAround0() and PositionUtils.ApplyOffsetToPosition() to save UPS.
 ---@param orientation RealOrientation
 ---@param offset MapPosition # the position to be rotated by the orientation.
 ---@param position MapPosition # the position the rotated offset is applied to.
@@ -287,14 +292,32 @@ PositionUtils.CalculateBoundingBoxToIncludeAllBoundingBoxes = function(listOfBou
     return { left_top = { x = minX, y = minY }, right_bottom = { x = maxX, y = maxY } }
 end
 
--- Applies an offset to a position. If you are rotating the offset first consider using PositionUtils.RotateOffsetAroundPosition() as lower UPS than the 2 separate function calls.
+-- Create a new position at an offset to an existing position. If you are rotating the offset first consider using PositionUtils.RotateOffsetAroundPosition() as lower UPS than the 2 separate function calls.
 ---@param position MapPosition
 ---@param offset MapPosition
----@return MapPosition
+---@return MapPosition newPosition
 PositionUtils.ApplyOffsetToPosition = function(position, offset)
     return {
         x = position.x + offset.x,
         y = position.y + offset.y
+    }
+end
+
+-- Create a new boundingBox at an offset to an existing boundingBox.
+---@param boundingBox BoundingBox
+---@param offset MapPosition
+---@return BoundingBox newBoundingBox
+PositionUtils.ApplyOffsetToBoundingBox = function(boundingBox, offset)
+    ---@type BoundingBox
+    return {
+        left_top = {
+            x = boundingBox.left_top.x + offset.x,
+            y = boundingBox.left_top.y + offset.y
+        },
+        right_bottom = {
+            x = boundingBox.right_bottom.x + offset.x,
+            y = boundingBox.right_bottom.y + offset.y
+        }
     }
 end
 
@@ -419,6 +442,7 @@ PositionUtils.GetOffsetForPositionFromPosition = function(newPosition, basePosit
     return { x = newPosition.x - basePosition.x, y = newPosition.y - basePosition.y }
 end
 
+--- Check if a position is within a BoundingBox. Ignores any orientation on the BoundingBox.
 ---@param position MapPosition
 ---@param boundingBox BoundingBox
 ---@param safeTiling? boolean # If enabled the BoundingBox can be tiled without risk of an entity on the border being in 2 result sets, i.e. for use on each chunk.
@@ -530,6 +554,73 @@ PositionUtils.FindWhereLineCrossesCircle = function(radius, slope, yIntercept)
         else
             return pos1, pos2
         end
+    end
+end
+
+--- See if 2 BoundingBoxes collide with each other.
+---
+--- Code from: https://stackoverflow.com/a/10965077
+---@param boundingBox1 BoundingBox
+---@param boundingBox2 BoundingBox
+---@return boolean boundingBoxesCollide
+PositionUtils.Do2RotatedBoundingBoxesCollide = function(boundingBox1, boundingBox2)
+    --TODO: this doesn't work as the bounding box passed in actually needs its center finding and then each position rotated around this. As a 0.75 orientation bounding box of a non square shape doesn't get the thin and thick corners right.
+    for _, boundingBox in pairs({ boundingBox1, boundingBox2 }) do
+        for i1 = 0, 3 do
+            local i2 = (i1 + 1) % 4
+            local p1 = PositionUtils.GetNumberedMapPositionFromBoundingBox(boundingBox, i1)
+            local p2 = PositionUtils.GetNumberedMapPositionFromBoundingBox(boundingBox, i2)
+
+            local normal = { x = p2.y - p1.y, y = p1.x - p2.x } --[[@as MapPosition]]
+
+            local minA, maxA
+            for boundingBox1_pointCount = 0, 3 do
+                local p = PositionUtils.GetNumberedMapPositionFromBoundingBox(boundingBox1, boundingBox1_pointCount)
+                local projected = normal.x * p.x + normal.y * p.y
+                if (minA == nil or projected < minA) then
+                    minA = projected
+                end
+                if (maxA == nil or projected > maxA) then
+                    maxA = projected
+                end
+            end
+
+            local minB, maxB
+            for boundingBox2_pointCount = 0, 3 do
+                local p = PositionUtils.GetNumberedMapPositionFromBoundingBox(boundingBox2, boundingBox2_pointCount)
+                local projected = normal.x * p.x + normal.y * p.y
+                if (minB == nil or projected < minB) then
+                    minB = projected
+                end
+                if (maxB == nil or projected > maxB) then
+                    maxB = projected
+                end
+            end
+
+            if (maxA < minB or maxB < minA) then
+                return false
+            end
+        end
+    end
+    return true
+end
+
+--- Get a numbered corner MapPosition from a bounding box.
+---@param boundingBox BoundingBox
+---@param pointNumber int # 0-3
+---@return MapPosition
+PositionUtils.GetNumberedMapPositionFromBoundingBox = function(boundingBox, pointNumber)
+    --TODO: just used by PositionUtils.Do2RotatedBoundingBoxesCollide() so can be changed as needed.
+    if pointNumber == 0 then
+        return boundingBox.left_top
+    elseif pointNumber == 1 then
+        return { x = boundingBox.right_bottom.x, y = boundingBox.left_top.y }
+    elseif pointNumber == 2 then
+        return boundingBox.right_bottom
+    elseif pointNumber == 3 then
+        return { x = boundingBox.left_top.x, y = boundingBox.right_bottom.y }
+    else
+        error("no 5th point in a BoundingBox")
     end
 end
 

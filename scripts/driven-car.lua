@@ -285,6 +285,8 @@ DrivenCar.HitWater = function(carEntity, speed, position, surface, entityName)
     carInWaterEntity.orientation = carInWaterOrientation
     carInWaterEntity.color = carEntity.color
     carInWaterEntity.health = carEntity.health
+    carInWaterEntity.rotatable = false
+    carInWaterEntity.active = false
 
     -- Transfer the main inventory across.
     local carEntity_mainInventory = carEntity.get_inventory(defines.inventory.car_trunk)
@@ -301,6 +303,7 @@ DrivenCar.HitWater = function(carEntity, speed, position, surface, entityName)
     if carEntity_burner ~= nil then
         local carInWaterEntity_burner = carInWaterEntity.burner ---@cast carInWaterEntity_burner - nil # If the real carEntity has an inventory so will the water copy of it.
 
+        -- Transfer the fuel input slots.
         local carEntity_burnerInputInventory = carEntity_burner.inventory
         if carEntity_burnerInputInventory ~= nil and not carEntity_burnerInputInventory.is_empty() then
             local carInWaterEntity_BurnerInputInventory = carInWaterEntity_burner.inventory ---@cast carInWaterEntity_BurnerInputInventory - nil # If the real carEntity has an inventory so will the water copy of it.
@@ -310,6 +313,7 @@ DrivenCar.HitWater = function(carEntity, speed, position, surface, entityName)
             end
         end
 
+        -- Transfer any burnt fuel inventory slots.
         local carEntity_burnerResultInventory = carEntity_burner.burnt_result_inventory
         if carEntity_burnerResultInventory ~= nil and not carEntity_burnerResultInventory.is_empty() then
             local carInWaterEntity_BurnerResultInventory = carInWaterEntity_burner.burnt_result_inventory ---@cast carInWaterEntity_BurnerResultInventory - nil # If the real carEntity has an inventory so will the water copy of it.
@@ -317,6 +321,16 @@ DrivenCar.HitWater = function(carEntity, speed, position, surface, entityName)
             for stackIndex = 1, #carEntity_burnerResultInventory do
                 carEntity_burnerResultInventory[stackIndex].swap_stack(carInWaterEntity_BurnerResultInventory[stackIndex])
             end
+        end
+
+        -- Transfer any fuel currently being burnt.
+        local carEntity_burnerCurrentlyBurning = carEntity_burner.currently_burning
+        if carEntity_burnerCurrentlyBurning ~= nil then
+            carInWaterEntity_burner.currently_burning = carEntity_burnerCurrentlyBurning
+        end
+        local carEntity_burnerRemainingBurningFuel = carEntity_burner.remaining_burning_fuel
+        if carEntity_burnerRemainingBurningFuel ~= nil then
+            carInWaterEntity_burner.remaining_burning_fuel = carEntity_burnerRemainingBurningFuel
         end
     end
 
@@ -414,13 +428,16 @@ DrivenCar.HitVoid = function(carEntity, speed, position, surface, entityName)
     carEntity.destroy({ raise_destroy = true })
 
     -- The progression of the vehicle each tick will handle its initial movement.
-    global.drivenCar.enteringVoid[#global.drivenCar.enteringVoid + 1] = { id = #global.drivenCar.enteringVoid + 1, oldPosition = position, speedAbs = math.abs(speed) --[[@as float]] , speedPositive = speed > 0, graphicId = graphicId, oldScale = 1, distanceToFallPosition = 1.5, orientation = orientation }
+    global.drivenCar.enteringVoid[#global.drivenCar.enteringVoid + 1] = { id = #global.drivenCar.enteringVoid + 1, oldPosition = position, speedAbs = math.abs(speed) --[[@as float]] , speedPositive = speed > 0, graphicId = graphicId, oldScale = 1, distanceToFallPosition = 2, orientation = orientation }
 end
 
 --- Called each tick for a car that is entering the void currently.
 ---@param carEnteringVoid CarEnteringVoid
 ---@return boolean continueMovingCar
 DrivenCar.CarContinuingToEnterVoid = function(carEnteringVoid)
+    -- Check the rendered graphic hasn't been removed.
+    if not rendering.is_valid(carEnteringVoid.graphicId) then return false end
+
     -- Reduce the scale steadily.
     local newScale = carEnteringVoid.oldScale - 0.01
     if newScale <= 0 then -- Do 0 or less as due to rounding issues the result may not actually ever be exactly 0.

@@ -22,6 +22,7 @@ for _, carPrototype in pairs(data.raw["car"]) do
     waterVariant.localised_name = { "entity-name.careful_driver-vehicle_stuck_in_water", { "entity-name." .. originalName } }
     waterVariant.localised_description = { "entity-description.careful_driver-vehicle_stuck_in_water", { "entity-name." .. originalName } }
     waterVariant.consumption = "0W" -- Vehicle is incapable of moving.
+    waterVariant.water_reflection.pictures.shift[2] = waterVariant.water_reflection.pictures.shift[2] - 1
 
     -- Make the icon include a water background so its obvious in the editor.
     waterVariant.icons = PrototypeUtils.AddLayerToCopyOfIcons(carPrototype, "__base__/graphics/terrain/water/hr-water-o.png", 64, "back")
@@ -36,7 +37,6 @@ for _, carPrototype in pairs(data.raw["car"]) do
             stripe.filename = string.gsub(stripe.filename, "__base__", "__careful_driver__")
             stripe.width_in_frames = 1
         end
-        waterVariant.animation.layers[1].width = 201
         waterVariant.animation.layers[1].stripes = util.multiplystripes(2, waterVariant.animation.layers[1].stripes) -- cSpell:ignore multiplystripes #  Double up the stripe entries on our new graphics. As the entire prototype is setup as if there are 2 animation frames, but we only bothered to make 1 in our new file.
 
         -- Overwrite the color mask graphics. This is unhelpfully on a different sprite sheet layout so ended up doing all by hand a second time quickly as very easy for these.
@@ -49,7 +49,17 @@ for _, carPrototype in pairs(data.raw["car"]) do
         waterVariant.animation.layers[3].shift[1] = waterVariant.animation.layers[3].shift[1] - 0.1
         waterVariant.animation.layers[3].shift[2] = waterVariant.animation.layers[3].shift[2] - 0.2
     elseif carPrototype.name == "tank" then
-        -- TODO: Need to make the graphics and then apply them here.
+        -- Overwrite the main graphics. Have to update the graphic file attribute as I trimmed the image file as it had duplication.
+        waterVariant.animation.layers[1] = waterVariant.animation.layers[1].hr_version
+        for _, stripe in pairs(waterVariant.animation.layers[1].stripes) do
+            stripe.filename = string.gsub(stripe.filename, "__base__", "__careful_driver__")
+            stripe.width_in_frames = 1
+        end
+        waterVariant.animation.layers[1].stripes = util.multiplystripes(2, waterVariant.animation.layers[1].stripes) -- cSpell:ignore multiplystripes #  Double up the stripe entries on our new graphics. As the entire prototype is setup as if there are 2 animation frames, but we only bothered to make 1 in our new file.
+
+        -- Move the shadow up a bit as the water surface is higher up. Not perfect, but looks better than default shadow position. Really I need to modify the shadow sprites to make it proper.
+        waterVariant.animation.layers[3].shift[1] = waterVariant.animation.layers[3].shift[1] - 0.1
+        waterVariant.animation.layers[3].shift[2] = waterVariant.animation.layers[3].shift[2] - 0.2
     end
 
     carsInWater[#carsInWater + 1] = waterVariant

@@ -1,0 +1,9 @@
+Bugs:
+
+
+To Add:
+    - Mod settings for damage percent taken by vehicles crashing in to cliffs and water (separate settings). Defaults to 100%.
+
+
+Ensure always:
+    - Add mod settings to disable features, by default all will be on at present.

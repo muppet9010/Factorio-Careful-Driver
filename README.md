@@ -14,6 +14,7 @@ Features
 - Cars and tanks that drive in to water take some damage and become stuck in the water. You have to mine the vehicle to recover it.
 - Cars and tanks that drive in to void/out-of-map tiles fall off the planet. The vehicle is gone.
 - Cars and tanks that drive in to cliffs take damage as the cliff is more solid than the tank.
+- All features can be disabled and controlled via mod settings.
 
 
 
@@ -38,10 +39,8 @@ Future Ideas
 ------------
 
 - Players can walk in to the water or void and treated similar to how vehicles are currently.
-- A way for players to appear to stay in the water/void vehicle for a few seconds until the effect finishes, then get ejected. Will need to be done in a way that doesn't confuse other mods in to thinking the player died. Mod option for if players are ejected from void entering cars or not.
-- Mod options for if items in vehicle/player are lost on relevant effects (entering void/water).
+- A way for players to appear to stay in the water vehicle for a few seconds until the effect finishes, then get ejected. Will need to be done in a way that doesn't confuse other mods in to thinking the player died. Mod option for if players are ejected from void entering cars or not.
+- If players are in vehicles entering the void they should be lost with the vehicle. Mod setting if player is ejected or if their corpse is left.
 - Trains that are driven to the end of a rail track will derail.
 - Trains won't stop instantly when they loose their path. Instead they will have to slow down at their max breaking speed. This will take effect when a player messes with a trains orders while its moving or removes rail track in a rail network.
 - Some feature around spider-vehicles walking in to water and off the map (void tiles). At present nothing is done to spider vehicles.
-- Mod settings for damage percent taken by vehicles crashing in to cliffs and water. Not sure needed, but some will probably want to tweak it.
-- Add mod settings to disable features, by default all will be on at present.

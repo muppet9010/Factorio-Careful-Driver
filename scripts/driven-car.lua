@@ -51,11 +51,29 @@ DrivenCar.CreateGlobals = function()
     global.drivenCar.movingCars = global.drivenCar.movingCars or {} ---@type table<LuaEntity, MovingCar> # Keyed by the vehicle entity.
     global.drivenCar.enteringWater = global.drivenCar.enteringWater or {} ---@type table<int, CarEnteringWater> # Keyed by a sequential integer number.
     global.drivenCar.enteringVoid = global.drivenCar.enteringVoid or {} ---@type table<int, CarEnteringVoid> # Keyed by a sequential integer number.
+
+    global.drivenCar.settings = global.drivenCar.settings or {} ---@class DrivenCar_Global_Settings
+    global.drivenCar.settings.cliffCollision = global.drivenCar.settings.cliffCollision or true
+    global.drivenCar.settings.waterCollision = global.drivenCar.settings.waterCollision or true
+    global.drivenCar.settings.voidCollision = global.drivenCar.settings.voidCollision or true
 end
 
 DrivenCar.OnStartup = function()
     if not EventScheduler.IsEventScheduledEachTick("DrivenCar.CheckTrackedCars_EachTick", "") then
         EventScheduler.ScheduleEventEachTick("DrivenCar.CheckTrackedCars_EachTick", "", nil)
+    end
+end
+
+---@param event EventData.on_runtime_mod_setting_changed|nil # nil value when called from OnStartup (on_init & on_configuration_changed)
+DrivenCar.OnSettingChanged = function(event)
+    if event == nil or event.setting == "careful_driver-car_cliff_collision" then
+        global.drivenCar.settings.cliffCollision = settings.global["careful_driver-car_cliff_collision"].value --[[@as boolean]]
+    end
+    if event == nil or event.setting == "careful_driver-car_water_collision" then
+        global.drivenCar.settings.waterCollision = settings.global["careful_driver-car_water_collision"].value --[[@as boolean]]
+    end
+    if event == nil or event.setting == "careful_driver-car_void_collision" then
+        global.drivenCar.settings.voidCollision = settings.global["careful_driver-car_void_collision"].value --[[@as boolean]]
     end
 end
 
@@ -195,56 +213,68 @@ DrivenCar.DidCarHitSomethingToStop = function(carEntity, oldPosition, oldSpeed, 
     -- Entities are collided with by a vehicle on their collision box. While tiles are collided with by the vehicles position and which tile this lands on. This means we would collide with an entity prior to a tile.
 
     -- Detect if it was a tile we hit. This is easier to check so do it first.
-    local futureTile = surface.get_tile(futurePosition--[[@as TilePosition]] )
-    local futureTile_name = futureTile.name
-    local futureTile_collidesMask = PrototypeAttributes.GetAttribute("tile", futureTile_name, "collision_mask") --[[@as CollisionMask]]
-    local carPrototype_collisionMask = PrototypeAttributes.GetAttribute("entity", entityName, "collision_mask") --[[@as CollisionMask]]
-    for tileCollisionMask in pairs(futureTile_collidesMask) do
-        if carPrototype_collisionMask[tileCollisionMask] ~= nil then
-            -- Collision between car and tile has occurred.
+    if global.drivenCar.settings.waterCollision or global.drivenCar.settings.voidCollision then
+        local futureTile = surface.get_tile(futurePosition--[[@as TilePosition]] )
+        local futureTile_name = futureTile.name
+        local futureTile_collidesMask = PrototypeAttributes.GetAttribute("tile", futureTile_name, "collision_mask") --[[@as CollisionMask]]
+        local carPrototype_collisionMask = PrototypeAttributes.GetAttribute("entity", entityName, "collision_mask") --[[@as CollisionMask]]
+        for tileCollisionMask in pairs(futureTile_collidesMask) do
+            if carPrototype_collisionMask[tileCollisionMask] ~= nil then
+                -- Collision between car and tile has occurred.
 
-            -- Use the collision layers to detect the tile type. Based on vanilla tiles, but should handle any modded ones as well.
-            if futureTile_collidesMask["ground-tile"] or futureTile_collidesMask["floor-layer"] or futureTile_collidesMask["object"] then
-                -- These are the layers vanilla out-of-map tiles have that waters don't.
-                return "void"
-            elseif futureTile_collidesMask["water-tile"] or futureTile_collidesMask["item-layer"] or futureTile_collidesMask["resource-layer"] or futureTile_collidesMask["player-layer"] or futureTile_collidesMask["doodad-layer"] or futureTile_collidesMask["object-layer"] then
-                -- These are the layers vanilla water tile have across the walkable and non-walkable tile types.
-                return "water"
-            else
-                -- No idea so error.
-                error("a car has collided with a tile that isn't on the tile layer of void or water...")
+                -- Use the collision layers to detect the tile type. Based on vanilla tiles, but should handle any modded ones as well.
+                if futureTile_collidesMask["ground-tile"] or futureTile_collidesMask["floor-layer"] or futureTile_collidesMask["object"] then
+                    -- These are the layers vanilla out-of-map tiles have that waters don't.
+                    if global.drivenCar.settings.voidCollision then
+                        return "void"
+                    else
+                        return "nothing"
+                    end
+                elseif futureTile_collidesMask["water-tile"] or futureTile_collidesMask["item-layer"] or futureTile_collidesMask["resource-layer"] or futureTile_collidesMask["player-layer"] or futureTile_collidesMask["doodad-layer"] or futureTile_collidesMask["object-layer"] then
+                    -- These are the layers vanilla water tile have across the walkable and non-walkable tile types.
+                    if global.drivenCar.settings.waterCollision then
+                        return "water"
+                    else
+                        return "nothing"
+                    end
+                else
+                    -- No idea so error.
+                    error("a car has collided with a tile that isn't on the tile layer of void or water...")
+                end
             end
         end
     end
 
     -- See if it stopped from hitting a cliff in its travelling direction.
-    -- CODE NOTE: Factorio doesn't support us passing in an orientation as part of a BoundingBox to any of its API functions, so we have to do it as a square area and then manually check any results for diagonal collisions.
-    local carsCollisionBox = PrototypeAttributes.GetAttribute("entity", entityName, "collision_box") --[[@as BoundingBox]]
-    -- Get the front edge of the car as we will need to check for any cliffs in this width. Add 10% as the car may have been turning at the point and so it will be slightly wider on that side. At worst this would just find a cliff beyond our own collision box and we will check each result anyways.
-    local frontBoundingBoxEdgeDistance
-    if oldSpeed > 0 then
-        frontBoundingBoxEdgeDistance = -carsCollisionBox.left_top.y * 1.1
-    else
-        frontBoundingBoxEdgeDistance = carsCollisionBox.right_bottom.y * 1.1
-    end
-    local vehicleWidth = carsCollisionBox.right_bottom.x - carsCollisionBox.left_top.x
-    local futureFrontBoundingBoxCenter = PositionUtils.GetPositionForOrientationDistance(futurePosition, frontBoundingBoxEdgeDistance, orientation)
-    -- Do an area search as we want to check cliff collision boxes and not for their center.
-    ---@type BoundingBox
-    local searchArea = { left_top = { x = futureFrontBoundingBoxCenter.x - vehicleWidth, y = futureFrontBoundingBoxCenter.y - vehicleWidth }, right_bottom = { x = futureFrontBoundingBoxCenter.x + vehicleWidth, y = futureFrontBoundingBoxCenter.y + vehicleWidth } }
-    local cliffsAroundFutureFrontEdge = surface.find_entities_filtered({ type = "cliff", area = searchArea })
-    if #cliffsAroundFutureFrontEdge > 0 then
-        -- Cliffs found to check
+    if global.drivenCar.settings.cliffCollision then
+        -- CODE NOTE: Factorio doesn't support us passing in an orientation as part of a BoundingBox to any of its API functions, so we have to do it as a square area and then manually check any results for diagonal collisions.
+        local carsCollisionBox = PrototypeAttributes.GetAttribute("entity", entityName, "collision_box") --[[@as BoundingBox]]
+        -- Get the front edge of the car as we will need to check for any cliffs in this width. Add 10% as the car may have been turning at the point and so it will be slightly wider on that side. At worst this would just find a cliff beyond our own collision box and we will check each result anyways.
+        local frontBoundingBoxEdgeDistance
+        if oldSpeed > 0 then
+            frontBoundingBoxEdgeDistance = -carsCollisionBox.left_top.y * 1.1
+        else
+            frontBoundingBoxEdgeDistance = carsCollisionBox.right_bottom.y * 1.1
+        end
+        local vehicleWidth = carsCollisionBox.right_bottom.x - carsCollisionBox.left_top.x
+        local futureFrontBoundingBoxCenter = PositionUtils.GetPositionForOrientationDistance(futurePosition, frontBoundingBoxEdgeDistance, orientation)
+        -- Do an area search as we want to check cliff collision boxes and not for their center.
+        ---@type BoundingBox
+        local searchArea = { left_top = { x = futureFrontBoundingBoxCenter.x - vehicleWidth, y = futureFrontBoundingBoxCenter.y - vehicleWidth }, right_bottom = { x = futureFrontBoundingBoxCenter.x + vehicleWidth, y = futureFrontBoundingBoxCenter.y + vehicleWidth } }
+        local cliffsAroundFutureFrontEdge = surface.find_entities_filtered({ type = "cliff", area = searchArea })
+        if #cliffsAroundFutureFrontEdge > 0 then
+            -- Cliffs found to check
 
-        -- Get the car's future bounding box, but as a Polygon of MapPositions for later manual comparison.
-        local futureCarCollisionPolygon = PositionUtils.MakePolygonMapPointsFromOrientatedCollisionBox(carsCollisionBox, orientation, futurePosition)
+            -- Get the car's future bounding box, but as a Polygon of MapPositions for later manual comparison.
+            local futureCarCollisionPolygon = PositionUtils.MakePolygonMapPointsFromOrientatedCollisionBox(carsCollisionBox, orientation, futurePosition)
 
-        -- Check each cliff for if it collides with the car.
-        for _, cliffEntity in pairs(cliffsAroundFutureFrontEdge) do
-            -- Have to use the bounding box as the different cliff-orientations have different collision boxes, but these aren't accessible via the entities prototype.
-            local cliffCollisionPolygon = PositionUtils.MakePolygonMapPointsFromOrientatedBoundingBox(cliffEntity.bounding_box, cliffEntity.orientation, cliffEntity.position)
-            if PositionUtils.Do2RotatedBoundingBoxesCollide(futureCarCollisionPolygon, cliffCollisionPolygon) then
-                return "cliff"
+            -- Check each cliff for if it collides with the car.
+            for _, cliffEntity in pairs(cliffsAroundFutureFrontEdge) do
+                -- Have to use the bounding box as the different cliff-orientations have different collision boxes, but these aren't accessible via the entities prototype.
+                local cliffCollisionPolygon = PositionUtils.MakePolygonMapPointsFromOrientatedBoundingBox(cliffEntity.bounding_box, cliffEntity.orientation, cliffEntity.position)
+                if PositionUtils.Do2RotatedBoundingBoxesCollide(futureCarCollisionPolygon, cliffCollisionPolygon) then
+                    return "cliff"
+                end
             end
         end
     end
@@ -344,7 +374,25 @@ DrivenCar.HitWater = function(carEntity, speed, position, surface, entityName)
         end
     end
 
-    -- Remove the real vehicle.
+    -- Transfer any equipment grid items across if the vehicle has one.
+    local carEntity_grid = carEntity.grid
+    if carEntity_grid ~= nil then
+        local carInWaterEntity_grid = carInWaterEntity.grid ---@cast carInWaterEntity_grid - nil # If the real car entity prototype has one so will our stuck in water prototype.
+        local movedEquipment, energy, shield
+        for _, equipment in pairs(carEntity_grid.equipment) do
+            movedEquipment = carInWaterEntity_grid.put({ name = equipment.name, position = equipment.position })
+            -- These values are 0 when empty but also when the Equipment prototype doesn't support having the value set.
+            energy = equipment.energy
+            if energy ~= 0 then movedEquipment.energy = energy end
+            shield = equipment.shield
+            if shield ~= 0 then movedEquipment.shield = shield end
+        end
+
+        -- Remove everything from the grid in the lost vehicle.
+        carEntity_grid.clear()
+    end
+
+    -- Remove the real vehicle. We have moved everything out of it, so if another mod reacts to its death, there will be no items or equipment in it.
     carEntity.destroy({ raise_destroy = true })
 
     -- The progression of the vehicle each tick will handle its initial movement and creation of water splash effects etc.

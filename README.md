@@ -32,6 +32,7 @@ Mod Compatibility
 - This mod doesn't change any of the collision masks of default entity types. So it should have no impact on other mods actions.
 - This mod does make custom graphics from other vehicles in the game. This has been designed around base game vehicles, so may need further additions to be able to handle all the different way modded vehicle graphics can be specified in code.
 - The graphics used for when road vehicles end up in the water have to be specifically made. Where these haven't been made for modded vehicles the regular vehicle graphic will be used instead. These graphics are just to help signify the vehicle isn't normal any more, rather than being game critical in some way.
+- The collision with tiles features use collision_masks to detect if a collision has occurred. So this should work with any modded tiles.
 
 
 
@@ -39,8 +40,8 @@ Future Ideas
 ------------
 
 - Players can walk in to the water or void and treated similar to how vehicles are currently.
-- A way for players to appear to stay in the water vehicle for a few seconds until the effect finishes, then get ejected. Will need to be done in a way that doesn't confuse other mods in to thinking the player died. Mod option for if players are ejected from void entering cars or not.
-- If players are in vehicles entering the void they should be lost with the vehicle. Mod setting if player is ejected or if their corpse is left.
+- Players can walk down cliffs in the right direction only. Does a percentage of max health (ignores shields)
+- A way for players to appear to stay in the water vehicle for a few seconds until the effect finishes, then get ejected out. Will need to be done in a way that doesn't confuse other mods in to thinking the player died. Mod option for if players are ejected from void entering cars or not. Maybe we just leave the player in the vehicle (allow players in a stuck vehicle) as its got a collision box, etc. Only issue is if the player is too far from land to get out themselves?
 - Trains that are driven to the end of a rail track will derail.
 - Trains won't stop instantly when they loose their path. Instead they will have to slow down at their max breaking speed. This will take effect when a player messes with a trains orders while its moving or removes rail track in a rail network.
 - Some feature around spider-vehicles walking in to water and off the map (void tiles). At present nothing is done to spider vehicles.

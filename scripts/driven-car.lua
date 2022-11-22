@@ -2,6 +2,11 @@
     This tracks a car from the point a player gets in to the car until the player gets out of the car and the car reaches 0 speed.
 ]]
 
+--[[
+FUTURE:
+    - To kill the car without corpse or explosion, we'd need to remove the real car, create a dummy car with a cloned prototype that doesn't have a corpse or death explosion, put the players in this car, then kill it via damage. That way the on_entity_death events would look natural to other mods and the  other mods could see who was driving the car from looking at its get_driver(). Alternatively the other mods could make an interface my mod can just call. Damage events we currently create a cause entity for, although in reality this could also be done via API, but it was very simple so done here first.
+]]
+
 local DrivenCar = {} ---@class DrivenCar
 local EventScheduler = require("utility.manager-libraries.event-scheduler")
 local PositionUtils = require("utility.helper-utils.position-utils")
@@ -56,6 +61,8 @@ DrivenCar.CreateGlobals = function()
     global.drivenCar.settings.cliffCollision = global.drivenCar.settings.cliffCollision or true
     global.drivenCar.settings.waterCollision = global.drivenCar.settings.waterCollision or true
     global.drivenCar.settings.voidCollision = global.drivenCar.settings.voidCollision or true
+    global.drivenCar.settings.cliffCollisionDamageMultiplier = global.drivenCar.settings.cliffCollisionDamageMultiplier or 100
+    global.drivenCar.settings.waterCollisionDamageMultiplier = global.drivenCar.settings.waterCollisionDamageMultiplier or 100
 end
 
 DrivenCar.OnStartup = function()
@@ -75,6 +82,12 @@ DrivenCar.OnSettingChanged = function(event)
     if event == nil or event.setting == "careful_driver-car_void_collision" then
         global.drivenCar.settings.voidCollision = settings.global["careful_driver-car_void_collision"].value --[[@as boolean]]
     end
+    if event == nil or event.setting == "careful_driver-car_cliff_damage_multiplier" then
+        global.drivenCar.settings.cliffCollisionDamageMultiplier = settings.global["careful_driver-car_cliff_damage_multiplier"].value --[[@as double]] / 100
+    end
+    if event == nil or event.setting == "careful_driver-car_water_damage_multiplier" then
+        global.drivenCar.settings.waterCollisionDamageMultiplier = settings.global["careful_driver-car_water_damage_multiplier"].value --[[@as double]] / 100
+    end
 end
 
 --- Called when a player has got in to a car.
@@ -92,7 +105,7 @@ end
 --- Called every tick to process any cars that are being tracked.
 ---@param event UtilityScheduledEvent_CallbackObject
 DrivenCar.CheckTrackedCars_EachTick = function(event)
-    local carEntity, currentSpeed, carHitThing
+    local carEntity, currentSpeed, carHitName, carHitThing
     for _, movingCarDetails in pairs(global.drivenCar.movingCars) do
         carEntity = movingCarDetails.entity
 
@@ -135,24 +148,25 @@ DrivenCar.CheckTrackedCars_EachTick = function(event)
 
         -- Check if the car has hit something to stop it.
         -- CODE NOTE: As the car has 0 speed this tick, it hasn't moved from its last tick position. So some of the cached data remains unchanged (position) that wouldn't if the car was still moving.
-        carHitThing = DrivenCar.DidCarHitSomethingToStop(carEntity, movingCarDetails.oldPosition, movingCarDetails.oldSpeed, movingCarDetails.oldSurface, movingCarDetails.name)
-        if carHitThing ~= "nothing" then
-            if carHitThing == "water" then
+        -- We attribute damage to an entity so that other mods can react accurately to the cause. For tiles we create a fake entity for this.
+        carHitName, carHitThing = DrivenCar.DidCarHitSomethingToStop(carEntity, movingCarDetails.oldPosition, movingCarDetails.oldSpeed, movingCarDetails.oldSurface, movingCarDetails.name)
+        if carHitName ~= "nothing" then
+            if carHitName == "water" then
                 DrivenCar.HitWater(carEntity, movingCarDetails.oldSpeed, movingCarDetails.oldPosition, movingCarDetails.oldSurface, movingCarDetails.name)
 
                 -- Car is done, so no need to process it any further.
                 global.drivenCar.movingCars[carEntity] = nil
                 goto EndOfMovingCarDetailsLoop
-            elseif carHitThing == "void" then
+            elseif carHitName == "void" then
                 DrivenCar.HitVoid(carEntity, movingCarDetails.oldSpeed, movingCarDetails.oldPosition, movingCarDetails.oldSurface, movingCarDetails.name)
 
                 -- Car is done, so no need to process it any further.
                 global.drivenCar.movingCars[carEntity] = nil
                 goto EndOfMovingCarDetailsLoop
-            elseif carHitThing == "cliff" then
-                -- Work out how much damage will be done by this crash. Do at full impact damage bouncing back to the vehicle as cliffs aren't soft.
-                local damageToCar = DrivenCar.CalculateCarImpactDamage(movingCarDetails.name, movingCarDetails.oldSpeed)
-                carEntity.damage(damageToCar, carEntity.force, "impact")
+            elseif carHitName == "cliff" then
+                -- Work out how much damage will be done by this crash. The vehicles resistances will reduce this value.
+                local damageToCar = DrivenCar.CalculateCarImpactDamage(movingCarDetails.name, movingCarDetails.oldSpeed) * global.drivenCar.settings.cliffCollisionDamageMultiplier
+                carEntity.damage(damageToCar, carEntity.force, "impact", carHitThing)
                 if not carEntity.valid then
                     -- Car was killed by the impact damage, so no need to handle it further.
                     global.drivenCar.movingCars[carEntity] = nil
@@ -203,7 +217,8 @@ end
 ---@param oldSpeed double # will never be 0.
 ---@param surface LuaSurface
 ---@param entityName string # Prototype name of the real car prototype.
----@return "water"|"void"|"cliff"|"nothing"
+---@return "water"|"void"|"cliff"|"nothing" nameOfThingHit
+---@return LuaEntity? thingHit # Only populated if the thing hit was an entity.
 DrivenCar.DidCarHitSomethingToStop = function(carEntity, oldPosition, oldSpeed, surface, entityName)
     local orientation = carEntity.orientation
 
@@ -273,7 +288,7 @@ DrivenCar.DidCarHitSomethingToStop = function(carEntity, oldPosition, oldSpeed, 
                 -- Have to use the bounding box as the different cliff-orientations have different collision boxes, but these aren't accessible via the entities prototype.
                 local cliffCollisionPolygon = PositionUtils.MakePolygonMapPointsFromOrientatedBoundingBox(cliffEntity.bounding_box, cliffEntity.orientation, cliffEntity.position)
                 if PositionUtils.Do2RotatedBoundingBoxesCollide(futureCarCollisionPolygon, cliffCollisionPolygon) then
-                    return "cliff"
+                    return "cliff", cliffEntity
                 end
             end
         end
@@ -289,9 +304,11 @@ end
 ---@param surface LuaSurface
 ---@param entityName string # Prototype name of the real car prototype.
 DrivenCar.HitWater = function(carEntity, speed, position, surface, entityName)
-    -- Work out how much damage will be done by this crash. Halve the impact damage amount as crashing in to water is "gentle". The damage to be done is halved before any resistance is taken in to account. So resistances then still get to reduce damage.
-    local damageToCar = DrivenCar.CalculateCarImpactDamage(entityName, speed) / 2
-    carEntity.damage(damageToCar, carEntity.force, "impact")
+    -- Work out how much damage will be done by this crash. Resistances then get to reduce damage actually suffered.
+    local damageToCar = DrivenCar.CalculateCarImpactDamage(entityName, speed) * global.drivenCar.settings.waterCollisionDamageMultiplier
+    local tokenWaterEntity = surface.create_entity({ name = "careful_driver-token_water_entity", position = position, force = carEntity.force, raise_built = false, create_build_effect_smoke = false }) ---@cast tokenWaterEntity - nil # Have to make this every time, as can't leave it anywhere sensible; as it must be on the cars surface and it needs to have graphics for when other mods reference it.
+    carEntity.damage(damageToCar, carEntity.force, "impact", tokenWaterEntity)
+    tokenWaterEntity.destroy({ raise_destroy = false })
     if not carEntity.valid then
         -- Car was killed by the impact damage, so no need to handle it further.
         return
@@ -392,7 +409,7 @@ DrivenCar.HitWater = function(carEntity, speed, position, surface, entityName)
         carEntity_grid.clear()
     end
 
-    -- Remove the real vehicle. We have moved everything out of it, so if another mod reacts to its death, there will be no items or equipment in it.
+    -- Remove the real vehicle. We have moved everything out of it, so if another mod reacts to its death, there will be no items or equipment in it, but the driver has been removed also.
     carEntity.destroy({ raise_destroy = true })
 
     -- The progression of the vehicle each tick will handle its initial movement and creation of water splash effects etc.

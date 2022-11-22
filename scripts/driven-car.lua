@@ -4,7 +4,7 @@
 
 --[[
 FUTURE:
-    - To kill the car without corpse or explosion, we'd need to remove the real car, create a dummy car with a cloned prototype that doesn't have a corpse or death explosion, put the players in this car, then kill it via damage. That way the on_entity_death events would look natural to other mods and the  other mods could see who was driving the car from looking at its get_driver(). Alternatively the other mods could make an interface my mod can just call. Damage events we currently create a cause entity for, although in reality this could also be done via API, but it was very simple so done here first.
+    - To kill the car without corpse or explosion, we'd need to remove the real car, create a dummy car with a cloned prototype that doesn't have a corpse or death explosion, put the players in this car, then kill it via damage. That way the on_entity_death events would look natural to other mods and the  other mods could see who was driving the car from looking at its get_driver(). Alternatively the other mods could make an interface my mod can just call. Damage events we currently create a cause entity for, although in reality this could also be done via API, but it was very simple so done here first. Same concept issue with when we vanish (destroy) a players character to avoid creating a body.
 ]]
 
 local DrivenCar = {} ---@class DrivenCar
@@ -42,6 +42,8 @@ local PrototypeAttributes = require("utility.functions.prototype-attributes")
 ---@field distanceToFallPosition double # How far the target needs to move to reach where it will just fall straight down.
 ---@field orientation RealOrientation
 
+---@alias PlayerInVoidCarOutcomes "vanish"|"die"|"eject"
+
 DrivenCar.OnLoad = function()
     EventScheduler.RegisterScheduler()
     EventScheduler.RegisterScheduledEventType("DrivenCar.CheckTrackedCars_EachTick", DrivenCar.CheckTrackedCars_EachTick)
@@ -59,10 +61,11 @@ DrivenCar.CreateGlobals = function()
 
     global.drivenCar.settings = global.drivenCar.settings or {} ---@class DrivenCar_Global_Settings
     global.drivenCar.settings.cliffCollision = global.drivenCar.settings.cliffCollision or true
+    global.drivenCar.settings.cliffCollisionDamageMultiplier = global.drivenCar.settings.cliffCollisionDamageMultiplier or 1.0
     global.drivenCar.settings.waterCollision = global.drivenCar.settings.waterCollision or true
+    global.drivenCar.settings.waterCollisionDamageMultiplier = global.drivenCar.settings.waterCollisionDamageMultiplier or 1.0
     global.drivenCar.settings.voidCollision = global.drivenCar.settings.voidCollision or true
-    global.drivenCar.settings.cliffCollisionDamageMultiplier = global.drivenCar.settings.cliffCollisionDamageMultiplier or 100
-    global.drivenCar.settings.waterCollisionDamageMultiplier = global.drivenCar.settings.waterCollisionDamageMultiplier or 100
+    global.drivenCar.settings.voidCollisionPlayerOutcome = global.drivenCar.settings.voidCollisionPlayerOutcome or "vanish" ---@type PlayerInVoidCarOutcomes
 end
 
 DrivenCar.OnStartup = function()
@@ -87,6 +90,9 @@ DrivenCar.OnSettingChanged = function(event)
     end
     if event == nil or event.setting == "careful_driver-car_water_damage_multiplier" then
         global.drivenCar.settings.waterCollisionDamageMultiplier = settings.global["careful_driver-car_water_damage_multiplier"].value --[[@as double]] / 100
+    end
+    if event == nil or event.setting == "careful_driver-player_in_car_void_collision" then
+        global.drivenCar.settings.voidCollisionPlayerOutcome = settings.global["careful_driver-player_in_car_void_collision"].value --[[@as PlayerInVoidCarOutcomes]]
     end
 end
 
@@ -315,13 +321,14 @@ DrivenCar.HitWater = function(carEntity, speed, position, surface, entityName)
     end
 
     -- Explicitly kick any players out of the car before we place the new one so that the game's natural placement logic can work. As having 2 cars on top of one another prevents this logic from working.
+    -- CODE NOTE: any player ejecting must be done from the car's view and not player.driving as that doesn't get the driver out quick enough.
     local driver = carEntity.get_driver()
     if driver ~= nil then
-        carEntity.set_driver(nil) -- Must do this from car's view and not player.driving as that doesn't get the driver out quick enough.
+        carEntity.set_driver(nil)
     end
     local passenger = carEntity.get_passenger()
     if passenger ~= nil then
-        carEntity.set_passenger(nil) -- Must do this from car's view and not player.driving as that doesn't get the driver out quick enough.
+        carEntity.set_passenger(nil)
     end
 
     -- Place the stuck in water car where the real car was.
@@ -409,7 +416,7 @@ DrivenCar.HitWater = function(carEntity, speed, position, surface, entityName)
         carEntity_grid.clear()
     end
 
-    -- Remove the real vehicle. We have moved everything out of it, so if another mod reacts to its death, there will be no items or equipment in it, but the driver has been removed also.
+    -- Remove the real vehicle. We have moved everything out of it, so if another mod reacts to its death, there will be no items or equipment in it and the driver has been removed also.
     carEntity.destroy({ raise_destroy = true })
 
     -- The progression of the vehicle each tick will handle its initial movement and creation of water splash effects etc.
@@ -461,9 +468,10 @@ end
 ---@return float
 DrivenCar.CalculateCarImpactDamage = function(carName, speed)
     -- This doesn't quite match base game logic, however we don't need to account for a vehicle accelerating from 0 in to something this tick or worry about it turning in to a target.
-    local remainingEnergy = speed * speed * PrototypeAttributes.GetAttribute("entity", carName, "weight") --[[@as double]]
-    local energyPerHitPoint = PrototypeAttributes.GetAttribute("entity", carName, "energy_per_hit_point") --[[@as double]]
-    return remainingEnergy / energyPerHitPoint --[[@as float]]
+    local weight, prototype = PrototypeAttributes.GetAttribute("entity", carName, "weight") ---@cast weight double
+    local remainingEnergy = speed * speed * weight
+    local energyPerHitPoint = PrototypeAttributes.GetAttribute("entity", carName, "energy_per_hit_point", prototype) ---@cast energyPerHitPoint double
+    return (remainingEnergy / energyPerHitPoint) --[[@as float]]
 end
 
 --- When a car has first hit void and stopped.
@@ -473,18 +481,71 @@ end
 ---@param surface LuaSurface
 ---@param entityName string # Prototype name of the real car prototype.
 DrivenCar.HitVoid = function(carEntity, speed, position, surface, entityName)
-    -- Explicitly kick any players out of the car before we do the void effect.
-    local driver = carEntity.get_driver()
-    if driver ~= nil then
-        carEntity.set_driver(nil) -- Must do this from car's view and not player.driving as that doesn't get the driver out quick enough.
-    end
-    local passenger = carEntity.get_passenger()
-    if passenger ~= nil then
-        carEntity.set_passenger(nil) -- Must do this from car's view and not player.driving as that doesn't get the driver out quick enough.
+    -- Handle the players in the vehicle based on setting.
+    -- CODE NOTE: any player ejecting must be done from the car's view and not player.driving as that doesn't get the driver out quick enough.
+    if global.drivenCar.settings.voidCollisionPlayerOutcome == "eject" then
+        -- Explicitly kick any players out of the car before we do the void effect.
+        local driver = carEntity.get_driver()
+        if driver ~= nil then
+            carEntity.set_driver(nil)
+        end
+        local passenger = carEntity.get_passenger()
+        if passenger ~= nil then
+            carEntity.set_passenger(nil)
+        end
+    elseif global.drivenCar.settings.voidCollisionPlayerOutcome == "corpse" then
+        -- Players die in the process but leave a corpse behind.
+        local tokenVoidEntity = surface.create_entity({ name = "careful_driver-token_void_entity", position = position, force = carEntity.force, raise_built = false, create_build_effect_smoke = false }) ---@cast tokenVoidEntity - nil # Have to make this every time, as can't leave it anywhere sensible; as it must be on the cars surface and it needs to have graphics for when other mods reference it.
+        local driver = carEntity.get_driver()
+        if driver ~= nil then
+            carEntity.set_driver(nil)
+            if not driver.is_player() then
+                -- Driver is a character and not a god player.
+                ---@cast driver LuaEntity
+                driver.die("neutral", tokenVoidEntity)
+            end
+        end
+        local passenger = carEntity.get_passenger()
+        if passenger ~= nil then
+            carEntity.set_passenger(nil)
+            if not passenger.is_player() then
+                -- Passenger is a character and not a god player.
+                ---@cast passenger LuaEntity
+                passenger.die("neutral", tokenVoidEntity)
+            end
+        end
+        tokenVoidEntity.destroy({ raise_destroy = false })
+    elseif global.drivenCar.settings.voidCollisionPlayerOutcome == "vanish" then
+        -- Players fall in to the void with their vehicle.
+        local driver = carEntity.get_driver()
+        if driver ~= nil then
+            if not driver.is_player() then
+                -- Driver is a character and not a god player.
+                ---@cast driver LuaEntity
+                local respawnTime = PrototypeAttributes.GetAttribute("entity", driver.name, "respawn_time") ---@cast respawnTime uint
+                local drivingPlayer = driver.player
+                driver.destroy({ raise_destroy = true })
+                drivingPlayer.ticks_to_respawn = respawnTime * 60
+            end
+        end
+        local passenger = carEntity.get_passenger()
+        if passenger ~= nil then
+            if not passenger.is_player() then
+                -- Passenger is a character and not a god player.
+                ---@cast passenger LuaEntity
+                local respawnTime = PrototypeAttributes.GetAttribute("entity", passenger.name, "respawn_time") ---@cast respawnTime uint
+                local drivingPlayer = passenger.player
+                passenger.destroy({ raise_destroy = true })
+                drivingPlayer.ticks_to_respawn = respawnTime * 60
+            end
+        end
+    else
+        error("unsupported voidCollisionPlayerOutcome option: " .. global.drivenCar.settings.voidCollisionPlayerOutcome)
     end
 
     -- Create the visual of the vehicle.
     local rotationNumber = DrivenCar.OrientationToRotation(carEntity.orientation)
+    --TODO: the tint is too strong...
     local graphicId = rendering.draw_animation({ animation = Common.GetCarInVoidName(entityName, rotationNumber), x_scale = 1.0, y_scale = 1.0, tint = carEntity.color, render_layer = "object", target = position, surface = surface })
 
     local orientation = carEntity.orientation

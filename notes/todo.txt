@@ -2,7 +2,6 @@ Bugs:
 
 
 To Add:
-    - If players are in vehicles entering the void they should be lost with the vehicle. Mod setting if player is ejected, if their corpse is left, of if they vanish with the vehicle.
 
 
 Ensure always:

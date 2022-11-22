@@ -36,6 +36,14 @@ data:extend(
             default_value = true,
             setting_type = "runtime-global",
             order = "1201"
+        },
+        {
+            name = "careful_driver-player_in_car_void_collision",
+            type = "string-setting",
+            default_value = "vanish",
+            allowed_values = { "vanish", "corpse", "eject" },
+            setting_type = "runtime-global",
+            order = "1202"
         }
     }
 )

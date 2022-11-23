@@ -2,7 +2,4 @@ Bugs:
 
 
 To Add:
-
-
-Ensure always:
-    - Add mod settings to disable features, by default all will be on at present.
+    - A way for players to appear to stay in the water vehicle for a few seconds until the effect finishes, then get ejected out. Will need to be done in a way that doesn't confuse other mods in to thinking the player died. Maybe we just leave the player in the vehicle (allow players in a stuck vehicle) as its got a collision box, etc. Only issue is if the player is too far from land to get out themselves?

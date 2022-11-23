@@ -41,7 +41,6 @@ Future Ideas
 
 - Players can walk in to the water or void and treated similar to how vehicles are currently.
 - Players can walk down cliffs in the right direction only. Does a percentage of max health (ignores shields)
-- A way for players to appear to stay in the water vehicle for a few seconds until the effect finishes, then get ejected out. Will need to be done in a way that doesn't confuse other mods in to thinking the player died. Mod option for if players are ejected from void entering cars or not. Maybe we just leave the player in the vehicle (allow players in a stuck vehicle) as its got a collision box, etc. Only issue is if the player is too far from land to get out themselves?
 - Trains that are driven to the end of a rail track will derail.
 - Trains won't stop instantly when they loose their path. Instead they will have to slow down at their max breaking speed. This will take effect when a player messes with a trains orders while its moving or removes rail track in a rail network.
 - Some feature around spider-vehicles walking in to water and off the map (void tiles). At present nothing is done to spider vehicles.

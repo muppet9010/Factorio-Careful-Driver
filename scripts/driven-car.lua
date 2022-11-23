@@ -34,7 +34,7 @@ local PrototypeAttributes = require("utility.functions.prototype-attributes")
 
 ---@class CarEnteringVoid
 ---@field id int
----@field graphicId uint64
+---@field graphicIds uint64[]
 ---@field speedAbs float
 ---@field speedPositive boolean
 ---@field oldPosition MapPosition
@@ -545,8 +545,10 @@ DrivenCar.HitVoid = function(carEntity, speed, position, surface, entityName)
 
     -- Create the visual of the vehicle.
     local rotationNumber = DrivenCar.OrientationToRotation(carEntity.orientation)
-    --TODO: the tint is too strong...
-    local graphicId = rendering.draw_animation({ animation = Common.GetCarInVoidName(entityName, rotationNumber), x_scale = 1.0, y_scale = 1.0, tint = carEntity.color, render_layer = "object", target = position, surface = surface })
+    local baseGraphicId = rendering.draw_animation({ animation = Common.GetCarInVoidName(entityName, rotationNumber, "body", "nonTinted"), x_scale = 1.0, y_scale = 1.0, render_layer = "object", target = position, surface = surface })
+    local tintedBaseGraphicId = rendering.draw_animation({ animation = Common.GetCarInVoidName(entityName, rotationNumber, "body", "tinted"), x_scale = 1.0, y_scale = 1.0, tint = carEntity.color, render_layer = "object", target = position, surface = surface })
+    local turretGraphicId = rendering.draw_animation({ animation = Common.GetCarInVoidName(entityName, rotationNumber, "turret", "nonTinted"), x_scale = 1.0, y_scale = 1.0, render_layer = "object", target = position, surface = surface })
+    local tintedTurretGraphicId = rendering.draw_animation({ animation = Common.GetCarInVoidName(entityName, rotationNumber, "turret", "tinted"), x_scale = 1.0, y_scale = 1.0, tint = carEntity.color, render_layer = "object", target = position, surface = surface })
 
     local orientation = carEntity.orientation
 
@@ -554,32 +556,52 @@ DrivenCar.HitVoid = function(carEntity, speed, position, surface, entityName)
     carEntity.destroy({ raise_destroy = true })
 
     -- The progression of the vehicle each tick will handle its initial movement.
-    global.drivenCar.enteringVoid[#global.drivenCar.enteringVoid + 1] = { id = #global.drivenCar.enteringVoid + 1, oldPosition = position, speedAbs = math.abs(speed) --[[@as float]] , speedPositive = speed > 0, graphicId = graphicId, oldScale = 1, distanceToFallPosition = 2, orientation = orientation }
+    global.drivenCar.enteringVoid[#global.drivenCar.enteringVoid + 1] = { id = #global.drivenCar.enteringVoid + 1, oldPosition = position, speedAbs = math.abs(speed) --[[@as float]] , speedPositive = speed > 0, graphicIds = { baseGraphicId, tintedBaseGraphicId, turretGraphicId, tintedTurretGraphicId }, oldScale = 1, distanceToFallPosition = 2, orientation = orientation }
 end
 
 --- Called each tick for a car that is entering the void currently.
 ---@param carEnteringVoid CarEnteringVoid
 ---@return boolean continueMovingCar
 DrivenCar.CarContinuingToEnterVoid = function(carEnteringVoid)
-    -- Check the rendered graphic hasn't been removed.
-    if not rendering.is_valid(carEnteringVoid.graphicId) then return false end
+    -- Check the rendered graphics hasn't been removed.
+    local aGraphicInvalid = false
+    for _, graphicId in pairs(carEnteringVoid.graphicIds) do
+        if not rendering.is_valid(graphicId) then
+            -- A graphic has been removed.
+            aGraphicInvalid = true
+            break
+        end
+    end
+    if aGraphicInvalid then
+        -- A graphic has been removed so remove all of them.
+        for _, graphicId in pairs(carEnteringVoid.graphicIds) do
+            if not rendering.is_valid(graphicId) then rendering.destroy(graphicId) end
+        end
+        return false
+    end
 
     -- Reduce the scale steadily.
     local newScale = carEnteringVoid.oldScale - 0.01
     if newScale <= 0 then -- Do 0 or less as due to rounding issues the result may not actually ever be exactly 0.
         -- Reached end of vanishing.
-        rendering.destroy(carEnteringVoid.graphicId)
+        for _, graphicId in pairs(carEnteringVoid.graphicIds) do
+            rendering.destroy(graphicId)
+        end
         return false
     end
 
-    rendering.set_x_scale(carEnteringVoid.graphicId, newScale)
-    rendering.set_y_scale(carEnteringVoid.graphicId, newScale)
+    for _, graphicId in pairs(carEnteringVoid.graphicIds) do
+        rendering.set_x_scale(graphicId, newScale)
+        rendering.set_y_scale(graphicId, newScale)
+    end
     carEnteringVoid.oldScale = newScale
 
     if carEnteringVoid.distanceToFallPosition > 0 then
         local newSpeedAbs = math.min(math.max(carEnteringVoid.speedAbs * 0.6, 0.05), carEnteringVoid.distanceToFallPosition)
         local newPosition = PositionUtils.GetPositionForOrientationDistance(carEnteringVoid.oldPosition, carEnteringVoid.speedPositive and newSpeedAbs or -newSpeedAbs, carEnteringVoid.orientation)
-        rendering.set_target(carEnteringVoid.graphicId, newPosition)
+        for _, graphicId in pairs(carEnteringVoid.graphicIds) do
+            rendering.set_target(graphicId, newPosition)
+        end
         carEnteringVoid.oldPosition = newPosition
         carEnteringVoid.speedAbs = newSpeedAbs
         carEnteringVoid.distanceToFallPosition = carEnteringVoid.distanceToFallPosition - newSpeedAbs
@@ -592,9 +614,23 @@ end
 ---@param orientation RealOrientation
 ---@return uint rotationNumber # 1-64
 DrivenCar.OrientationToRotation = function(orientation)
-    local upperOrientation = orientation + 0.0078125 -- Half of the orientation per rotation. This is to get us up to the upper band as 0 is actually the middle of the first rotation.
-    local rotation = math.floor(upperOrientation / 0.015625) + 1 --[[@as uint]]
-    if rotation == 65 then rotation = 1 end -- To catch the upper bound of orientation.
+    --local rotation = MathUtils.RoundNumberToDecimalPlaces(orientation / 0.015625, 0) + 1 --[[@as uint]]
+    --local x = MathUtils.RoundNumberToDecimalPlaces(orientation / 0.015625, 0) --[[@as uint]]
+    -- 0.703125
+    --if rotation == 0 then rotation = 64 end
+
+    --local upperOrientation = orientation + 0.0078125 -- Half of the orientation per rotation. This is to get us up to the upper band as 0 is actually the middle of the first rotation.
+    --local rotation = math.floor(upperOrientation / 0.015625) + 1 --[[@as uint]]
+    --if rotation == 0 then rotation = 64 end -- To catch the upper bound of orientation.
+    --if rotation == 65 then rotation = 1 end -- To catch the upper bound of orientation.
+
+    local x = math.sin(orientation * math.pi * 2)
+    local y = -math.cos(orientation * math.pi * 2)
+
+    y = y * math.cos(math.pi / 4)
+
+    local rotation = math.atan2(x, -y) / (math.pi * 2)
+
     return rotation
 end
 

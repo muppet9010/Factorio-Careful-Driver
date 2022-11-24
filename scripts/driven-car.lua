@@ -544,7 +544,8 @@ DrivenCar.HitVoid = function(carEntity, speed, position, surface, entityName)
     end
 
     -- Create the visual of the vehicle.
-    local rotationNumber = DrivenCar.OrientationToRotation(carEntity.orientation)
+    -- We just assume they all have 64 rotations for now. As I don't see a way to get this info at run time.
+    local rotationNumber = MathUtils.GetRotationFromInGameOrientation(carEntity.orientation, 64)
     local baseGraphicId = rendering.draw_animation({ animation = Common.GetCarInVoidName(entityName, rotationNumber, "body", "nonTinted"), x_scale = 1.0, y_scale = 1.0, render_layer = "object", target = position, surface = surface })
     local tintedBaseGraphicId = rendering.draw_animation({ animation = Common.GetCarInVoidName(entityName, rotationNumber, "body", "tinted"), x_scale = 1.0, y_scale = 1.0, tint = carEntity.color, render_layer = "object", target = position, surface = surface })
     local turretGraphicId = rendering.draw_animation({ animation = Common.GetCarInVoidName(entityName, rotationNumber, "turret", "nonTinted"), x_scale = 1.0, y_scale = 1.0, render_layer = "object", target = position, surface = surface })
@@ -608,30 +609,6 @@ DrivenCar.CarContinuingToEnterVoid = function(carEnteringVoid)
     end
 
     return true
-end
-
---- Get a rotation number from an orientation value. We assume all cars have the full 64 rotations.
----@param orientation RealOrientation
----@return uint rotationNumber # 1-64
-DrivenCar.OrientationToRotation = function(orientation)
-    --local rotation = MathUtils.RoundNumberToDecimalPlaces(orientation / 0.015625, 0) + 1 --[[@as uint]]
-    --local x = MathUtils.RoundNumberToDecimalPlaces(orientation / 0.015625, 0) --[[@as uint]]
-    -- 0.703125
-    --if rotation == 0 then rotation = 64 end
-
-    --local upperOrientation = orientation + 0.0078125 -- Half of the orientation per rotation. This is to get us up to the upper band as 0 is actually the middle of the first rotation.
-    --local rotation = math.floor(upperOrientation / 0.015625) + 1 --[[@as uint]]
-    --if rotation == 0 then rotation = 64 end -- To catch the upper bound of orientation.
-    --if rotation == 65 then rotation = 1 end -- To catch the upper bound of orientation.
-
-    local x = math.sin(orientation * math.pi * 2)
-    local y = -math.cos(orientation * math.pi * 2)
-
-    y = y * math.cos(math.pi / 4)
-
-    local rotation = math.atan2(x, -y) / (math.pi * 2)
-
-    return rotation
 end
 
 return DrivenCar

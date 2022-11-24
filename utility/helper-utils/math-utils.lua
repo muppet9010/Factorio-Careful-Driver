@@ -1,10 +1,12 @@
 --[[
     All maths related utils functions.
 ]]
---
+
+-- cSpell:words Nixie
 
 local MathUtils = {} ---@class Utility_MathUtils
-local math_min, math_max, math_floor, math_random = math.min, math.max, math.floor, math.random
+local math_min, math_max, math_floor, math_random, math_sin, math_cos, math_atan2, math_pi = math.min, math.max, math.floor, math.random, math.sin, math.cos, math.atan2, math.pi
+local math_pi2 = math_pi * 2
 
 --- Round the value to the given number of decimal places.
 ---@param value double
@@ -293,5 +295,78 @@ MathUtils.uint64Max = 18446744073709551615 ---@type uint64 # 18,446,744,073,709,
 MathUtils.uint32Max = 4294967295 ---@type uint # 4,294,967,295
 MathUtils.uint16Max = 65535 ---@type uint16 # 65,535
 MathUtils.uint8Max = 255 ---@type uint8
+
+--- Get a rotation number from an in game (ellipse) orientation.
+---
+--- As there's not a direct mapping of orientation to rotation due to Factorio's view angle, meaning some rotations have larger/smaller orientation ranges than others. Its not circular rotation, it's around an ellipse because of the projection.
+---@param factorioOrientation RealOrientation # Factorio's in-game ellipse orientation.
+---@param maxRotationCount uint
+---@return uint rotationNumber # 1-64
+MathUtils.GetRotationFromInGameOrientation = function(factorioOrientation, maxRotationCount)
+    local naturalOrientation = MathUtils.GetCircularOrientationForInGameOrientation(factorioOrientation)
+
+    local upperOrientation = naturalOrientation + 0.0078125 -- Half of the orientation per rotation. This is to get us up to the upper band as 0 is actually the middle of the first rotation.
+    local rotation = math_floor(upperOrientation / 0.015625) + 1 --[[@as uint]]
+    if rotation == 65 then rotation = 1 end
+
+    return rotation
+end
+
+--- Get an in game (ellipse) orientation value from a rotation count number.
+---
+--- As there's not a direct mapping of orientation to rotation due to Factorio's view angle, meaning some rotations have larger/smaller orientation ranges than others. Its not circular rotation, it's around an ellipse because of the projection.
+---@param rotationNumber uint # 1-64
+---@param maxRotationCount uint
+---@return RealOrientation factorioOrientation # Factorio's in-game ellipse orientation.
+MathUtils.GetInGameOrientationForRotation = function(rotationNumber, maxRotationCount)
+    local naturalOrientation = (rotationNumber - 1) * (1 / maxRotationCount) --[[@as RealOrientation]]
+    return MathUtils.GetInGameOrientationForCircularOrientation(naturalOrientation)
+end
+
+--- Get a conceptual (circular) orientation from an in game (ellipse) orientation value.
+---
+--- As there's not a direct mapping of orientation to rotation due to Factorio's view angle, meaning some rotations have larger/smaller orientation ranges than others. Its not circular rotation, it's around an ellipse because of the projection.
+---@param factorioOrientation RealOrientation  # Factorio's in-game ellipse orientation.
+---@return RealOrientation naturalOrientation # The circular orientation.
+MathUtils.GetCircularOrientationForInGameOrientation = function(factorioOrientation)
+    -- Code breaks with 1 or more orientation value.
+    if factorioOrientation >= 1 then factorioOrientation = factorioOrientation - 1 end
+
+    -- Code inverse from Nixie Tube mod 0.15.18 as suggested by JustARandomGeek.
+    local factorioOrientation_radians = factorioOrientation * math_pi2
+    local x = math_sin(factorioOrientation_radians)
+    local y = -math_cos(factorioOrientation_radians)
+    y = y / math_cos(math_pi / 4) -- This is the conversation ratio from elliptical to circular.
+    local naturalOrientation_radians = math_atan2(x, -y)
+    local naturalOrientation = naturalOrientation_radians / math_pi2 --[[@as RealOrientation]]
+
+    -- The default result is -0.5 to 0.5
+    if naturalOrientation < 0 then naturalOrientation = 1 + naturalOrientation --[[@as RealOrientation]] end
+
+    return naturalOrientation
+end
+
+--- Get an in game (ellipse) orientation value from a conceptual (circular) orientation.
+---
+--- As there's not a direct mapping of orientation to rotation due to Factorio's view angle, meaning some rotations have larger/smaller orientation ranges than others. Its not circular rotation, it's around an ellipse because of the projection.
+---@param naturalOrientation RealOrientation # The circular orientation.
+---@return RealOrientation factorioOrientation # Factorio's in-game ellipse orientation.
+MathUtils.GetInGameOrientationForCircularOrientation = function(naturalOrientation)
+    -- Code breaks with 1 or more orientation value.
+    if naturalOrientation >= 1 then naturalOrientation = naturalOrientation - 1 end
+
+    -- Code from Nixie Tube mod 0.15.18 as suggested by JustARandomGeek.
+    local naturalOrientation_radians = naturalOrientation * math_pi2
+    local x = math_sin(naturalOrientation_radians)
+    local y = -math_cos(naturalOrientation_radians)
+    y = y * math_cos(math_pi / 4) -- This is the conversation ratio from circular to elliptical.
+    local factorioOrientation_radians = math_atan2(x, -y)
+    local factorioOrientation = factorioOrientation_radians / math_pi2 --[[@as RealOrientation]]
+
+    -- The default result is -0.5 to 0.5
+    if factorioOrientation < 0 then factorioOrientation = 1 + factorioOrientation --[[@as RealOrientation]] end
+
+    return factorioOrientation
+end
 
 return MathUtils

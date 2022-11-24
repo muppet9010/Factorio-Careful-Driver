@@ -22,7 +22,7 @@ Random Notes
 ------------
 
 - When vehicles collide with cliffs they take as much damage as they do when colliding with other indestructible things. This is basically how much damage they would do to other things they hit, but bounced back to them, minus their resistances. So a heavy weight tank hitting a cliff at high speed hurts the tank a lot. Driving in to water does half the base damage to the vehicle as hitting a cliff, as water is a bit more forgiving than solid rock.
-- The graphics for the vehicles in water are quick (few hours) in GIMP per vehicle. They aren't a work of art, but should look a bit "off" from the lower vehicle part being in water. The aim was for it to be apparent it wasn't a standard vehicle.
+- The graphics for the vehicles in water are quick (few hours) in GIMP per vehicle. They aren't a work of art, but should look different enough from the lower vehicle part being in water. The aim was for it to be apparent it wasn't a standard vehicle.
 
 
 

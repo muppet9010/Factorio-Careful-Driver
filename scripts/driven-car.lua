@@ -62,7 +62,7 @@ DrivenCar.OnLoad = function()
     EventScheduler.RegisterScheduler()
     EventScheduler.RegisterScheduledEventType("DrivenCar.CheckTrackedCars_EachTick", DrivenCar.CheckTrackedCars_EachTick)
     EventScheduler.RegisterScheduledEventType("DrivenCar.On_PlayerTriedToGetOutOfWaterCar", DrivenCar.On_PlayerTriedToGetOutOfWaterCar)
-
+    Events.RegisterHandlerEvent(defines.events.on_entity_destroyed, "DrivenCar.OnRegisteredEntityDestroyed_Event", DrivenCar.OnRegisteredEntityDestroyed_Event)
     Events.RegisterHandlerCustomInput("careful_driver-toggle_driving", "DrivenCar.OnToggleDriving_CustomInput", DrivenCar.OnToggleDriving_CustomInput)
 
     MOD.Interfaces.DrivenCar = {
@@ -481,8 +481,9 @@ DrivenCar.CarContinuingToEnterWater = function(carEnteringWater)
         -- Car is still entering water.
         return true
     else
-        -- Car has finished entering water.
+        -- Car has finished entering water. But will now remain in the water and so we have to register some things to handle it's oddness.
         global.drivenCar.inWater[carEnteringWater.id] = carEnteringWater
+        script.register_on_entity_destroyed(carEnteringWater.entity)
         return false
     end
 end
@@ -664,8 +665,6 @@ DrivenCar.OnToggleDriving_CustomInput = function(event)
         vehicle = vehicle
     }
     EventScheduler.ScheduleEventOnce(-1, "DrivenCar.On_PlayerTriedToGetOutOfWaterCar", delayedLeaveCarInWater_id, delayedLeaveCarInWater, event.tick)
-
-    -- TODO: need to track when the vehicle is destroyed and dump the player in the water/land based on player setting. Need to remove the global inWater entry when the car is mined or destroyed. use the entity destroyed event where we register an individual entity for it, as I think this handles all removal causes.
 end
 
 --- Called after a player has tried to get out of a water vehicle and we have let the game's natural player exit vehicle action occur.
@@ -687,11 +686,10 @@ DrivenCar.On_PlayerTriedToGetOutOfWaterCar = function(event)
         return
     end
 
-    -- Look for somewhere to eject the player. As the vehicle will be in the water and thus the game won't eject the player.
+    -- Get the details about the vehicle stuck in the water.
     local id = vehicle.unit_number --[[@as uint # Vehicles always have a unit number.]]
     local carEnteringWaterEntry = global.drivenCar.enteringWater[id] or global.drivenCar.inWater[id]
     if carEnteringWaterEntry == nil then return end
-    local newPosition = player.surface.find_non_colliding_position(player_character.name, carEnteringWaterEntry.originalPosition, 3, 0.1, false)
 
     -- Eject the player.
     local vehicle_driver = vehicle.get_driver()
@@ -702,12 +700,40 @@ DrivenCar.On_PlayerTriedToGetOutOfWaterCar = function(event)
     end
 
     -- Put the player in the right position, as they will be standing out in the water.
+    local newPosition = player.surface.find_non_colliding_position(player_character.name, carEnteringWaterEntry.originalPosition, 3, 0.1, false)
     if newPosition == nil then
         player.teleport(carEnteringWaterEntry.originalPosition)
         Logging.LogPrintWarning("Sorry " .. player.name .. " can't find somewhere to place you nicely - Careful Driver mod.", false)
     else
         player.teleport(newPosition)
     end
+end
+
+--- Called when any entity registered for destroyed event is destroyed. We only register cars once they are stuck in water and have finished entering the water.
+---@param event EventData.on_entity_destroyed
+DrivenCar.OnRegisteredEntityDestroyed_Event = function(event)
+    local event_unitNumber = event.unit_number
+    if event_unitNumber == nil then return end
+    local carInWater = global.drivenCar.inWater[event_unitNumber]
+    if carInWater == nil then return end
+
+    -- A car that is sitting in the water has been removed, so tidy up. The cached `entity` in carInWater is invalid now.
+
+    -- We should check for any player characters that were in the car and are now stuck on the water.
+    local charactersInWater = carInWater.surface.find_entities_filtered({ type = "character", position = carInWater.oldPosition })
+    for _, character in pairs(charactersInWater) do
+        -- Put the character in the right position, as they will be standing out in the water.
+        local newPosition = carInWater.surface.find_non_colliding_position(character.name, carInWater.originalPosition, 3, 0.1, false)
+        if newPosition == nil then
+            character.teleport(carInWater.originalPosition)
+            Logging.LogPrintWarning("Sorry " .. character.player.name .. " can't find somewhere to place you nicely - Careful Driver mod.", false)
+        else
+            character.teleport(newPosition)
+        end
+    end
+
+    -- We no longer need to track it for players struggling to get out of it.
+    global.drivenCar.inWater[event_unitNumber] = nil
 end
 
 return DrivenCar

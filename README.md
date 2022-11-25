@@ -33,6 +33,7 @@ Mod Compatibility
 - This mod does make custom graphics from other vehicles in the game. This has been designed around base game vehicles, so may need further additions to be able to handle all the different way modded vehicle graphics can be specified in code.
 - The graphics used for when road vehicles end up in the water have to be specifically made. Where these haven't been made for modded vehicles the regular vehicle graphic will be used instead. These graphics are just to help signify the vehicle isn't normal any more, rather than being game critical in some way.
 - The collision with tiles features use collision_masks to detect if a collision has occurred. So this should work with any modded tiles.
+- Vehicles stuck in the water are made inactive, to both stop them being used as glitchy gun emplacements and so that other mods can recognise these vehicles as not being drivable.
 
 
 

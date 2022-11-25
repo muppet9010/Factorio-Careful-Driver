@@ -618,21 +618,53 @@ PositionUtils.MakePolygonMapPointsFromOrientatedCollisionBox = function(collisio
     return polygon
 end
 
---- Get an array of MapPosition points from a bounding box (positioned collision box) at a given position, handles all orientations.
+--- Get an array of MapPosition points from a bounding box (positioned collision box) rotated around a given position, handles all orientations.
+---
+--- If the position is outside of the bounding box then it will appear to rotate the bounding box as an offset from this. It is technically the same as if the position is within the bounding box, but the effects can feel quite different. Best seen with some polygon renders of the results.
 ---@param boundingBox BoundingBox
 ---@param centerPosition MapPosition
 ---@param orientation RealOrientation
 ---@return MapPosition[]
---TODO: the changes to this should probably be a new function. ????
 PositionUtils.MakePolygonMapPointsFromOrientatedBoundingBox = function(boundingBox, orientation, centerPosition)
     local polygon = {} ---@type MapPosition[]
 
-    polygon[1] = PositionUtils.RotateOffsetAroundPosition(orientation, { x = boundingBox.left_top.x, y = boundingBox.left_top.y }, centerPosition)
-    polygon[2] = PositionUtils.RotateOffsetAroundPosition(orientation, { x = boundingBox.right_bottom.x, y = boundingBox.left_top.y }, centerPosition)
-    polygon[3] = PositionUtils.RotateOffsetAroundPosition(orientation, { x = boundingBox.right_bottom.x, y = boundingBox.right_bottom.y }, centerPosition)
-    polygon[4] = PositionUtils.RotateOffsetAroundPosition(orientation, { x = boundingBox.left_top.x, y = boundingBox.right_bottom.y }, centerPosition)
+    polygon[1] = PositionUtils.RotateOffsetAroundPosition(orientation, { x = boundingBox.left_top.x - centerPosition.x, y = boundingBox.left_top.y - centerPosition.y }, centerPosition)
+    polygon[2] = PositionUtils.RotateOffsetAroundPosition(orientation, { x = boundingBox.right_bottom.x - centerPosition.x, y = boundingBox.left_top.y - centerPosition.y }, centerPosition)
+    polygon[3] = PositionUtils.RotateOffsetAroundPosition(orientation, { x = boundingBox.right_bottom.x - centerPosition.x, y = boundingBox.right_bottom.y - centerPosition.y }, centerPosition)
+    polygon[4] = PositionUtils.RotateOffsetAroundPosition(orientation, { x = boundingBox.left_top.x - centerPosition.x, y = boundingBox.right_bottom.y - centerPosition.y }, centerPosition)
 
     return polygon
+
+    -- Test code to demonstrate how it behaves. Change `centerPos` to be inside or outside of the `boundingBox`.
+    --[[
+        ---@type BoundingBox
+        local boundingBox = { left_top = { x = -3, y = -2 }, right_bottom = { x = 2, y = 1 } }
+        local centerPos = { x = 5, y = 5 }
+
+        local surface = game.surfaces[1] --[ [@as LuaSurface] ]
+        rendering.draw_circle({ surface = surface, color = { 0.0, 0.0, 0.0, 1.0 }, radius = 0.1, filled = true, target = centerPos })
+
+
+        local colorCount = 1
+        local colors = { { 1.0, 0.0, 0.0, 1.0 }, { 0.0, 1.0, 0.0, 1.0 }, { 0.0, 0.0, 1.0, 1.0 } }
+        local rotationCount = 24
+        for rotation = 0, rotationCount - 1 do
+            local orientation = rotation / rotationCount --[ [@as RealOrientation] ]
+            if rotation == 0 then orientation = 0.0 end
+
+            local vertices = {} ---@type table[]
+            for i, pos in pairs(PositionUtils.MakePolygonMapPointsFromOrientatedBoundingBox(boundingBox, orientation, centerPos)) do
+                vertices[i] = { target = pos }
+            end
+            vertices[5] = vertices[1]
+
+            local color = colors[colorCount]
+            rendering.draw_polygon({ surface = surface, color = color, vertices = vertices, draw_on_ground = true })
+
+            colorCount = colorCount + 1
+            if colorCount > 3 then colorCount = 1 end
+        end
+    ]]
 end
 
 --- Check if a position is within a circles area.

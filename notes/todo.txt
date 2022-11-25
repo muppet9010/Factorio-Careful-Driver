@@ -1,4 +1,6 @@
 Bugs:
+    - Driving a car in to a diagonal cliff with the car just off vertical fails to detect the cliff and thus not damage the car.
 
 
 To Add:
+    - Add gif of the 3 car features.

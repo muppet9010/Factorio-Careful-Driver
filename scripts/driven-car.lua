@@ -3,6 +3,11 @@
 ]]
 
 --[[
+CODE NOTES:
+    -- Any player ejecting from vehicle must be done from the car's view (set_driver) and not the player's (player.driving) so that it happens instantly and so that it happens even if the car is in a position that the player can't naturally stand.
+]]
+
+--[[
 FUTURE:
     - To kill the car without corpse or explosion, we'd need to remove the real car, create a dummy car with a cloned prototype that doesn't have a corpse or death explosion, put the players in this car, then kill it via damage. That way the on_entity_death events would look natural to other mods and the  other mods could see who was driving the car from looking at its get_driver(). Alternatively the other mods could make an interface my mod can just call. Damage events we currently create a cause entity for, although in reality this could also be done via API, but it was very simple so done here first. Same concept issue with when we vanish (destroy) a players character to avoid creating a body.
 ]]
@@ -13,6 +18,9 @@ local PositionUtils = require("utility.helper-utils.position-utils")
 local Common = require("common")
 local MathUtils = require("utility.helper-utils.math-utils")
 local PrototypeAttributes = require("utility.functions.prototype-attributes")
+local Events = require("utility.manager-libraries.events")
+local Logging = require("utility.helper-utils.logging-utils")
+local TableUtils = require("utility.helper-utils.table-utils")
 
 --- The details about a moving player car we need to track.
 ---@class MovingCar
@@ -23,7 +31,7 @@ local PrototypeAttributes = require("utility.functions.prototype-attributes")
 ---@field oldSurface LuaSurface
 
 ---@class CarEnteringWater
----@field id int
+---@field id uint # The unit_number of the entity.
 ---@field entity LuaEntity
 ---@field oldSpeedAbs float
 ---@field speedPositive boolean
@@ -31,6 +39,7 @@ local PrototypeAttributes = require("utility.functions.prototype-attributes")
 ---@field orientation RealOrientation
 ---@field surface LuaSurface
 ---@field name string # Prototype name of the car in water.
+---@field originalPosition MapPosition # Where the car was on land before it started to enter the water.
 
 ---@class CarEnteringVoid
 ---@field id int
@@ -44,9 +53,17 @@ local PrototypeAttributes = require("utility.functions.prototype-attributes")
 
 ---@alias PlayerInVoidCarOutcomes "vanish"|"die"|"eject"
 
+---@class DelayedLeaveCarInWater
+---@field playerId uint # Player index.
+---@field player LuaPlayer
+---@field vehicle LuaEntity
+
 DrivenCar.OnLoad = function()
     EventScheduler.RegisterScheduler()
     EventScheduler.RegisterScheduledEventType("DrivenCar.CheckTrackedCars_EachTick", DrivenCar.CheckTrackedCars_EachTick)
+    EventScheduler.RegisterScheduledEventType("DrivenCar.On_PlayerTriedToGetOutOfWaterCar", DrivenCar.On_PlayerTriedToGetOutOfWaterCar)
+
+    Events.RegisterHandlerCustomInput("careful_driver-toggle_driving", "DrivenCar.OnToggleDriving_CustomInput", DrivenCar.OnToggleDriving_CustomInput)
 
     MOD.Interfaces.DrivenCar = {
         OnPlayerGotInCar = DrivenCar.OnPlayerGotInCar
@@ -56,7 +73,8 @@ end
 DrivenCar.CreateGlobals = function()
     global.drivenCar = global.drivenCar or {} ---@class DrivenCar_Global
     global.drivenCar.movingCars = global.drivenCar.movingCars or {} ---@type table<LuaEntity, MovingCar> # Keyed by the vehicle entity.
-    global.drivenCar.enteringWater = global.drivenCar.enteringWater or {} ---@type table<int, CarEnteringWater> # Keyed by a sequential integer number.
+    global.drivenCar.enteringWater = global.drivenCar.enteringWater or {} ---@type table<uint, CarEnteringWater> # Keyed by carEnteringWater unit_number.
+    global.drivenCar.inWater = global.drivenCar.inWater or {} ---@type table<uint, CarEnteringWater> # Keyed by carInWater unit_number.
     global.drivenCar.enteringVoid = global.drivenCar.enteringVoid or {} ---@type table<int, CarEnteringVoid> # Keyed by a sequential integer number.
 
     global.drivenCar.settings = global.drivenCar.settings or {} ---@class DrivenCar_Global_Settings
@@ -98,14 +116,15 @@ end
 
 --- Called when a player has got in to a car.
 ---@param carEntity LuaEntity
-DrivenCar.OnPlayerGotInCar = function(carEntity)
+---@param carName string
+DrivenCar.OnPlayerGotInCar = function(carEntity, carName)
     if global.drivenCar.movingCars[carEntity] ~= nil then
         -- Car is already being tracked.
         return
     end
 
     -- Record the initial details for the car.
-    global.drivenCar.movingCars[carEntity] = { entity = carEntity, oldSpeed = carEntity.speed, oldPosition = carEntity.position, oldSurface = carEntity.surface, name = carEntity.name }
+    global.drivenCar.movingCars[carEntity] = { entity = carEntity, oldSpeed = carEntity.speed, oldPosition = carEntity.position, oldSurface = carEntity.surface, name = carName }
 end
 
 --- Called every tick to process any cars that are being tracked.
@@ -203,9 +222,9 @@ DrivenCar.CheckTrackedCars_EachTick = function(event)
     end
 
     -- Progress any cars that are entering the water.
-    for index, carEnteringWater in pairs(global.drivenCar.enteringWater) do
+    for unitNumber, carEnteringWater in pairs(global.drivenCar.enteringWater) do
         if not DrivenCar.CarContinuingToEnterWater(carEnteringWater) then
-            global.drivenCar.enteringWater[index] = nil
+            global.drivenCar.enteringWater[unitNumber] = nil
         end
     end
 
@@ -320,17 +339,6 @@ DrivenCar.HitWater = function(carEntity, speed, position, surface, entityName)
         return
     end
 
-    -- Explicitly kick any players out of the car before we place the new one so that the game's natural placement logic can work. As having 2 cars on top of one another prevents this logic from working.
-    -- CODE NOTE: any player ejecting must be done from the car's view and not player.driving as that doesn't get the driver out quick enough.
-    local driver = carEntity.get_driver()
-    if driver ~= nil then
-        carEntity.set_driver(nil)
-    end
-    local passenger = carEntity.get_passenger()
-    if passenger ~= nil then
-        carEntity.set_passenger(nil)
-    end
-
     -- Place the stuck in water car where the real car was.
     local carInWaterEntityName = Common.GetCarInWaterName(entityName)
     local carInWaterOrientation = carEntity.orientation
@@ -416,11 +424,25 @@ DrivenCar.HitWater = function(carEntity, speed, position, surface, entityName)
         carEntity_grid.clear()
     end
 
+    -- Move the players across to the new car.
+    local driver = carEntity.get_driver()
+    if driver ~= nil then
+        carEntity.set_driver(nil)
+        carInWaterEntity.set_driver(driver)
+    end
+    local passenger = carEntity.get_passenger()
+    if passenger ~= nil then
+        carEntity.set_passenger(nil)
+        carInWaterEntity.set_passenger(passenger)
+    end
+
     -- Remove the real vehicle. We have moved everything out of it, so if another mod reacts to its death, there will be no items or equipment in it and the driver has been removed also.
     carEntity.destroy({ raise_destroy = true })
 
     -- The progression of the vehicle each tick will handle its initial movement and creation of water splash effects etc.
-    global.drivenCar.enteringWater[#global.drivenCar.enteringWater + 1] = { id = #global.drivenCar.enteringWater + 1, entity = carInWaterEntity, oldPosition = position, oldSpeedAbs = math.abs(speed) --[[@as float]] , speedPositive = speed > 0, orientation = carInWaterOrientation, surface = surface, name = carInWaterEntityName }
+    local id = carInWaterEntity.unit_number --[[@as uint # Vehicles always have a unit number.]]
+    -- `originalPosition` is done as a separate copy of the position table to `oldPosition` as we will be updating `oldPosition` as the car enters the water. So want `originalPosition` table's values left unchanged.
+    global.drivenCar.enteringWater[id] = { id = id, entity = carInWaterEntity, oldPosition = position, oldSpeedAbs = math.abs(speed) --[[@as float]] , speedPositive = speed > 0, orientation = carInWaterOrientation, surface = surface, name = carInWaterEntityName, originalPosition = TableUtils.DeepCopy(position) }
 end
 
 --- Called each tick for a car that is entering the water currently.
@@ -456,8 +478,11 @@ DrivenCar.CarContinuingToEnterWater = function(carEnteringWater)
     carEnteringWater.oldSpeedAbs = math.max(carEnteringWater.oldSpeedAbs - speedReduction, 0)
 
     if carEnteringWater.oldSpeedAbs > 0 then
+        -- Car is still entering water.
         return true
     else
+        -- Car has finished entering water.
+        global.drivenCar.inWater[carEnteringWater.id] = carEnteringWater
         return false
     end
 end
@@ -482,7 +507,6 @@ end
 ---@param entityName string # Prototype name of the real car prototype.
 DrivenCar.HitVoid = function(carEntity, speed, position, surface, entityName)
     -- Handle the players in the vehicle based on setting.
-    -- CODE NOTE: any player ejecting must be done from the car's view and not player.driving as that doesn't get the driver out quick enough.
     if global.drivenCar.settings.voidCollisionPlayerOutcome == "eject" then
         -- Explicitly kick any players out of the car before we do the void effect.
         local driver = carEntity.get_driver()
@@ -609,6 +633,81 @@ DrivenCar.CarContinuingToEnterVoid = function(carEnteringVoid)
     end
 
     return true
+end
+
+--- Called when a player presses the key to enter/exit a vehicle.
+---@param event CustomInputEvent
+DrivenCar.OnToggleDriving_CustomInput = function(event)
+    local player = game.get_player(event.player_index) ---@cast player - nil
+    local vehicle = player.vehicle
+    if vehicle == nil then
+        -- Player is trying to get in to a vehicle.
+        return
+    end
+    if string.find(vehicle.name, "-stuck_in_water", 1, true) == nil then
+        -- Player is in a vehicle, but its not a stuck in water one, so no need to react.
+        return
+    end
+
+    local player_character = player.character
+    if player_character == nil then
+        -- No body, so can just let the game naturally eject the player ghost.
+        return
+    end
+
+    -- Schedule a check later this tick to see if the player's character managed to get out of the car stuck in water vehicle or not.
+    local delayedLeaveCarInWater_id = event.player_index
+    ---@type DelayedLeaveCarInWater
+    local delayedLeaveCarInWater = {
+        playerId = delayedLeaveCarInWater_id,
+        player = player,
+        vehicle = vehicle
+    }
+    EventScheduler.ScheduleEventOnce(-1, "DrivenCar.On_PlayerTriedToGetOutOfWaterCar", delayedLeaveCarInWater_id, delayedLeaveCarInWater, event.tick)
+
+    -- TODO: need to track when the vehicle is destroyed and dump the player in the water/land based on player setting. Need to remove the global inWater entry when the car is mined or destroyed. use the entity destroyed event where we register an individual entity for it, as I think this handles all removal causes.
+end
+
+--- Called after a player has tried to get out of a water vehicle and we have let the game's natural player exit vehicle action occur.
+---@param event UtilityScheduledEvent_CallbackObject
+DrivenCar.On_PlayerTriedToGetOutOfWaterCar = function(event)
+    local delayedLeaveCarInWater = event.data --[[@as DelayedLeaveCarInWater]]
+    local player, vehicle = delayedLeaveCarInWater.player, delayedLeaveCarInWater.vehicle
+
+    local player_character = player.character
+    -- Check the player's character still exists in case another mod did something weird.
+    if player_character == nil then
+        -- No body, so can just let the game naturally eject the player ghost.
+        return
+    end
+
+    -- Check if the player has left the vehicle or ended up in another one.
+    if not vehicle.valid or vehicle ~= player.vehicle then
+        -- Vehicle isn't the same so nothing to do.
+        return
+    end
+
+    -- Look for somewhere to eject the player. As the vehicle will be in the water and thus the game won't eject the player.
+    local id = vehicle.unit_number --[[@as uint # Vehicles always have a unit number.]]
+    local carEnteringWaterEntry = global.drivenCar.enteringWater[id] or global.drivenCar.inWater[id]
+    if carEnteringWaterEntry == nil then return end
+    local newPosition = player.surface.find_non_colliding_position(player_character.name, carEnteringWaterEntry.originalPosition, 3, 0.1, false)
+
+    -- Eject the player.
+    local vehicle_driver = vehicle.get_driver()
+    if vehicle_driver ~= nil and (vehicle_driver == player or vehicle_driver == player_character) then
+        vehicle.set_driver(nil)
+    else
+        vehicle.set_passenger(nil)
+    end
+
+    -- Put the player in the right position, as they will be standing out in the water.
+    if newPosition == nil then
+        player.teleport(carEnteringWaterEntry.originalPosition)
+        Logging.LogPrintWarning("Sorry " .. player.name .. " can't find somewhere to place you nicely - Careful Driver mod.", false)
+    else
+        player.teleport(newPosition)
+    end
 end
 
 return DrivenCar

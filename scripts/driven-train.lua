@@ -32,9 +32,10 @@ DrivenTrain.OnStartup = function()
     end
 end
 
---- Called when a player has got in to a car.
+--- Called when a player has got in to a train carriage.
 ---@param trainCarriageEntity LuaEntity
-DrivenTrain.OnPlayerGotInTrain = function(trainCarriageEntity)
+---@param trainCarriageName string
+DrivenTrain.OnPlayerGotInTrain = function(trainCarriageEntity, trainCarriageName)
 
 end
 

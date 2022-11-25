@@ -1,5 +1,5 @@
 --[[
-    Create a copy of each `car` type that is non drivable for the stuck in water version.
+    Create a copy of each `car` type that can't move for the stuck in water version.
 
     Run in final fixes data stage in the hope I don't have to add any dependencies on other mods, as I don't want to change their prototypes, just make a copy of them.
 ]]
@@ -7,6 +7,7 @@
 local TableUtils = require("utility.helper-utils.table-utils")
 local Common = require("common")
 local PrototypeUtils = require("utility.helper-utils.prototype-utils-data-stage")
+local CollisionMaskUtils = require("__core__.lualib.collision-mask-util")
 
 local carsInWater = {} ---@type table<int, Prototype.Car>
 for _, carPrototype in pairs(data.raw["car"]) do
@@ -18,11 +19,16 @@ for _, carPrototype in pairs(data.raw["car"]) do
 
     -- Update the simpler fields on our water variant.
     waterVariant.name = Common.GetCarInWaterName(originalName)
-    waterVariant.allow_passengers = false
     waterVariant.localised_name = { "entity-name.careful_driver-vehicle_stuck_in_water", { "entity-name." .. originalName } }
     waterVariant.localised_description = { "entity-description.careful_driver-vehicle_stuck_in_water", { "entity-name." .. originalName } }
     waterVariant.consumption = "0W" -- Vehicle is incapable of moving.
     waterVariant.water_reflection.pictures.shift[2] = waterVariant.water_reflection.pictures.shift[2] - 1
+
+    -- Stopping te collision with water doesn't seem to affect getting the player in/out of the vehicle. But does make testing with the entity easier.
+    local collisionMask = CollisionMaskUtils.get_default_mask(waterVariant.type) --[[@as CollisionMask]]
+    CollisionMaskUtils.remove_layer(collisionMask, "water-tile")
+    CollisionMaskUtils.remove_layer(collisionMask, "consider-tile-transitions")
+    waterVariant.collision_mask = collisionMask
 
     -- Make the icon include a water background so its obvious in the editor.
     waterVariant.icons = PrototypeUtils.AddLayerToCopyOfIcons(carPrototype, "__base__/graphics/terrain/water/hr-water-o.png", 64, "back")

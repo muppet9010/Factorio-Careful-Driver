@@ -623,13 +623,14 @@ end
 ---@param centerPosition MapPosition
 ---@param orientation RealOrientation
 ---@return MapPosition[]
+--TODO: the changes to this should probably be a new function. ????
 PositionUtils.MakePolygonMapPointsFromOrientatedBoundingBox = function(boundingBox, orientation, centerPosition)
     local polygon = {} ---@type MapPosition[]
 
-    polygon[1] = PositionUtils.RotateOffsetAroundPosition(orientation, { x = boundingBox.left_top.x - centerPosition.x, y = boundingBox.left_top.y - centerPosition.y }, centerPosition)
-    polygon[2] = PositionUtils.RotateOffsetAroundPosition(orientation, { x = boundingBox.right_bottom.x - centerPosition.x, y = boundingBox.left_top.y - centerPosition.y }, centerPosition)
-    polygon[3] = PositionUtils.RotateOffsetAroundPosition(orientation, { x = boundingBox.right_bottom.x - centerPosition.x, y = boundingBox.right_bottom.y - centerPosition.y }, centerPosition)
-    polygon[4] = PositionUtils.RotateOffsetAroundPosition(orientation, { x = boundingBox.left_top.x - centerPosition.x, y = boundingBox.right_bottom.y - centerPosition.y }, centerPosition)
+    polygon[1] = PositionUtils.RotateOffsetAroundPosition(orientation, { x = boundingBox.left_top.x, y = boundingBox.left_top.y }, centerPosition)
+    polygon[2] = PositionUtils.RotateOffsetAroundPosition(orientation, { x = boundingBox.right_bottom.x, y = boundingBox.left_top.y }, centerPosition)
+    polygon[3] = PositionUtils.RotateOffsetAroundPosition(orientation, { x = boundingBox.right_bottom.x, y = boundingBox.right_bottom.y }, centerPosition)
+    polygon[4] = PositionUtils.RotateOffsetAroundPosition(orientation, { x = boundingBox.left_top.x, y = boundingBox.right_bottom.y }, centerPosition)
 
     return polygon
 end

@@ -190,6 +190,7 @@ DrivenCar.CheckTrackedCars_EachTick = function(event)
                 goto EndOfMovingCarDetailsLoop
             elseif carHitName == "cliff" then
                 -- Work out how much damage will be done by this crash. The vehicles resistances will reduce this value.
+                game.print("hit cliff - " .. game.tick)
                 local damageToCar = DrivenCar.CalculateCarImpactDamage(movingCarDetails.name, movingCarDetails.oldSpeed) * global.drivenCar.settings.cliffCollisionDamageMultiplier
                 carEntity.damage(damageToCar, carEntity.force, "impact", carHitThing)
                 if not carEntity.valid then
@@ -211,7 +212,7 @@ DrivenCar.CheckTrackedCars_EachTick = function(event)
             goto EndOfMovingCarDetailsLoop
         end
 
-        -- The car has stopped naturally so continue monitoring it.
+        -- The car has stopped naturally and still has players in it so continue monitoring it.
 
         ::UpdateCarDataInMovingCarDetailsLoop::
         -- Update the standard data for this ticks state, as we need to continue monitoring it for future ticks.
@@ -247,7 +248,7 @@ end
 DrivenCar.DidCarHitSomethingToStop = function(carEntity, oldPosition, oldSpeed, surface, entityName)
     local orientation = carEntity.orientation
 
-    -- Work out where the car would be if it had continued at its old speed from its old position on its current orientation.
+    -- Work out where the car would be if it had continued at its old speed from its old position on its current orientation. We are ignoring if it was accelerating, but this hasn't caused any issues to date.
     local futurePosition = PositionUtils.GetPositionForOrientationDistance(oldPosition, oldSpeed, orientation)
 
     -- Entities are collided with by a vehicle on their collision box. While tiles are collided with by the vehicles position and which tile this lands on. This means we would collide with an entity prior to a tile.
@@ -289,29 +290,67 @@ DrivenCar.DidCarHitSomethingToStop = function(carEntity, oldPosition, oldSpeed, 
     if global.drivenCar.settings.cliffCollision then
         -- CODE NOTE: Factorio doesn't support us passing in an orientation as part of a BoundingBox to any of its API functions, so we have to do it as a square area and then manually check any results for diagonal collisions.
         local carsCollisionBox = PrototypeAttributes.GetAttribute("entity", entityName, "collision_box") --[[@as BoundingBox]]
-        -- Get the front edge of the car as we will need to check for any cliffs in this width. Add 10% as the car may have been turning at the point and so it will be slightly wider on that side. At worst this would just find a cliff beyond our own collision box and we will check each result anyways.
+        -- Get the front edge of the car as we will need to check for any cliffs in this width. At worst this would just find a cliff beyond our own collision box and we will check each result anyways.
         local frontBoundingBoxEdgeDistance
         if oldSpeed > 0 then
-            frontBoundingBoxEdgeDistance = -carsCollisionBox.left_top.y * 1.1
+            frontBoundingBoxEdgeDistance = -carsCollisionBox.left_top.y
         else
-            frontBoundingBoxEdgeDistance = carsCollisionBox.right_bottom.y * 1.1
+            frontBoundingBoxEdgeDistance = carsCollisionBox.right_bottom.y
         end
-        local vehicleWidth = carsCollisionBox.right_bottom.x - carsCollisionBox.left_top.x
         local futureFrontBoundingBoxCenter = PositionUtils.GetPositionForOrientationDistance(futurePosition, frontBoundingBoxEdgeDistance, orientation)
+
+        -- Make the vehicle width check add 10% each side as the car may have been turning at the point and so it will be slightly wider on that side.
+        local vehicleWidthFromCenter = (carsCollisionBox.right_bottom.x - carsCollisionBox.left_top.x) * 0.6
+
+        --rendering.draw_circle({ surface = surface, color = { 0.0, 0.0, 0.0, 1.0 }, radius = 0.1, filled = true, target = oldPosition })
+        --rendering.draw_circle({ surface = surface, color = { 1.0, 1.0, 1.0, 1.0 }, radius = 0.1, filled = true, target = futurePosition })
+        --rendering.draw_circle({ surface = surface, color = { 1.0, 0.0, 0.0, 1.0 }, radius = 0.1, filled = true, target = PositionUtils.GetPositionForOrientationDistance(oldPosition, frontBoundingBoxEdgeDistance, orientation) })
+        --rendering.draw_circle({ surface = surface, color = { 0.0, 1.0, 0.0, 1.0 }, radius = 0.1, filled = true, target = futureFrontBoundingBoxCenter })
+
         -- Do an area search as we want to check cliff collision boxes and not for their center.
         ---@type BoundingBox
-        local searchArea = { left_top = { x = futureFrontBoundingBoxCenter.x - vehicleWidth, y = futureFrontBoundingBoxCenter.y - vehicleWidth }, right_bottom = { x = futureFrontBoundingBoxCenter.x + vehicleWidth, y = futureFrontBoundingBoxCenter.y + vehicleWidth } }
+        local searchArea = { left_top = { x = futureFrontBoundingBoxCenter.x - vehicleWidthFromCenter, y = futureFrontBoundingBoxCenter.y - vehicleWidthFromCenter }, right_bottom = { x = futureFrontBoundingBoxCenter.x + vehicleWidthFromCenter, y = futureFrontBoundingBoxCenter.y + vehicleWidthFromCenter } }
+
+        --rendering.draw_rectangle({ surface = surface, color = { 1.0, 1.0, 0.0, 1.0 }, filled = true, left_top = searchArea.left_top, right_bottom = searchArea.right_bottom, draw_on_ground = true })
+
         local cliffsAroundFutureFrontEdge = surface.find_entities_filtered({ type = "cliff", area = searchArea })
+        -- TODO: once all these other changes are settled, when we reverse in to cliffs it never detects in any car and cliff orientation.
         if #cliffsAroundFutureFrontEdge > 0 then
             -- Cliffs found to check
 
             -- Get the car's future bounding box, but as a Polygon of MapPositions for later manual comparison.
             local futureCarCollisionPolygon = PositionUtils.MakePolygonMapPointsFromOrientatedCollisionBox(carsCollisionBox, orientation, futurePosition)
 
+            local renderCarPolygonVertices = {} ---@type table[]
+            for i, pos in pairs(futureCarCollisionPolygon) do
+                renderCarPolygonVertices[i] = { target = pos }
+            end
+            renderCarPolygonVertices[5] = renderCarPolygonVertices[1]
+            rendering.draw_polygon({ surface = surface, color = { 0.0, 0.0, 1.0, 1.0 }, vertices = renderCarPolygonVertices, draw_on_ground = true })
+
             -- Check each cliff for if it collides with the car.
             for _, cliffEntity in pairs(cliffsAroundFutureFrontEdge) do
                 -- Have to use the bounding box as the different cliff-orientations have different collision boxes, but these aren't accessible via the entities prototype.
-                local cliffCollisionPolygon = PositionUtils.MakePolygonMapPointsFromOrientatedBoundingBox(cliffEntity.bounding_box, cliffEntity.orientation, cliffEntity.position)
+                -- Cliffs don't use orientation, instead we can get this from their bounding_box. But they don't rotate around their entity position, instead around the center of their bounding box which is an offset from their position.
+                --TODO: update this block to make it more concise and use the new PositionUtils function when that is scoped out first.
+                local cliffEntity_boundingBox = cliffEntity.bounding_box
+                local xWidthHalf = (cliffEntity_boundingBox.right_bottom.x - cliffEntity_boundingBox.left_top.x) / 2
+                local yWidthHalf = (cliffEntity_boundingBox.right_bottom.y - cliffEntity_boundingBox.left_top.y) / 2
+                local cliffBoundingBoxCenterPos = { x = cliffEntity_boundingBox.left_top.x + xWidthHalf, y = cliffEntity_boundingBox.left_top.y + yWidthHalf }
+                rendering.draw_circle({ surface = surface, color = { 0.0, 0.0, 0.0, 1.0 }, radius = 0.1, filled = true, target = cliffBoundingBoxCenterPos })
+                cliffEntity_boundingBox.left_top.x = cliffEntity_boundingBox.left_top.x - cliffBoundingBoxCenterPos.x
+                cliffEntity_boundingBox.right_bottom.x = cliffEntity_boundingBox.right_bottom.x - cliffBoundingBoxCenterPos.x
+                cliffEntity_boundingBox.left_top.y = cliffEntity_boundingBox.left_top.y - cliffBoundingBoxCenterPos.y
+                cliffEntity_boundingBox.right_bottom.y = cliffEntity_boundingBox.right_bottom.y - cliffBoundingBoxCenterPos.y
+                local cliffCollisionPolygon = PositionUtils.MakePolygonMapPointsFromOrientatedBoundingBox(cliffEntity_boundingBox, cliffEntity_boundingBox.orientation or 0.0, cliffBoundingBoxCenterPos)
+
+                local renderCliffPolygonVertices = {} ---@type table[]
+                for i, pos in pairs(cliffCollisionPolygon) do
+                    renderCliffPolygonVertices[i] = { target = pos }
+                end
+                renderCliffPolygonVertices[5] = renderCliffPolygonVertices[1]
+                rendering.draw_polygon({ surface = surface, color = { 0.0, 1.0, 0.0, 1.0 }, vertices = renderCliffPolygonVertices, draw_on_ground = true })
+
                 if PositionUtils.Do2RotatedBoundingBoxesCollide(futureCarCollisionPolygon, cliffCollisionPolygon) then
                     return "cliff", cliffEntity
                 end

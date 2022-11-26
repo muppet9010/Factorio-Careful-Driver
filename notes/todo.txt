@@ -2,3 +2,5 @@ Bugs:
 
 
 To Add:
+    - Add a thumbnail to the mod.
+    - Work on the walking player parts.

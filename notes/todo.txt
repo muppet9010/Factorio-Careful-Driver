@@ -1,5 +1,4 @@
 Bugs:
-    - If loaded game with player in car then we don't record player's color for a void car. But if the player gets in to the car during the same session as the car is voided we do know the players color. The regular car shows the correct color in both cases, just our void animation that loses it.
 
 
 To Add:

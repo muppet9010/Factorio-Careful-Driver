@@ -568,7 +568,20 @@ end
 ---@param surface LuaSurface
 ---@param entityName string # Prototype name of the real car prototype.
 DrivenCar.HitVoid = function(carEntity, speed, position, surface, entityName)
+    -- Create the visual of the vehicle.
+    -- We just assume they all have 64 rotations for now. As I don't see a way to get this info at run time.
+    local rotationNumber = MathUtils.GetRotationFromInGameOrientation(carEntity.orientation, 64)
+    local carEntity_color = carEntity.color
+    local baseGraphicId = rendering.draw_animation({ animation = Common.GetCarInVoidName(entityName, rotationNumber, "body", "nonTinted"), x_scale = 1.0, y_scale = 1.0, render_layer = "object", target = position, surface = surface })
+    local tintedBaseGraphicId = rendering.draw_animation({ animation = Common.GetCarInVoidName(entityName, rotationNumber, "body", "tinted"), x_scale = 1.0, y_scale = 1.0, tint = carEntity_color, render_layer = "object", target = position, surface = surface })
+    local turretGraphicId = rendering.draw_animation({ animation = Common.GetCarInVoidName(entityName, rotationNumber, "turret", "nonTinted"), x_scale = 1.0, y_scale = 1.0, render_layer = "object", target = position, surface = surface })
+    local tintedTurretGraphicId = rendering.draw_animation({ animation = Common.GetCarInVoidName(entityName, rotationNumber, "turret", "tinted"), x_scale = 1.0, y_scale = 1.0, tint = carEntity_color, render_layer = "object", target = position, surface = surface })
+
+    -- Get the orientation for use later before we destroy the car.
+    local orientation = carEntity.orientation
+
     -- Handle the players in the vehicle based on setting.
+    -- Do this after we get any attributes we need as destroying the player's character in the car (vanish option) does make the car's color revert to its previous color. And we want the animation to have the current drivers color.
     if global.drivenCar.settings.voidCollisionPlayerOutcome == "eject" then
         -- Explicitly kick any players out of the car before we do the void effect.
         local driver = carEntity.get_driver()
@@ -628,16 +641,6 @@ DrivenCar.HitVoid = function(carEntity, speed, position, surface, entityName)
     else
         error("unsupported voidCollisionPlayerOutcome option: " .. global.drivenCar.settings.voidCollisionPlayerOutcome)
     end
-
-    -- Create the visual of the vehicle.
-    -- We just assume they all have 64 rotations for now. As I don't see a way to get this info at run time.
-    local rotationNumber = MathUtils.GetRotationFromInGameOrientation(carEntity.orientation, 64)
-    local baseGraphicId = rendering.draw_animation({ animation = Common.GetCarInVoidName(entityName, rotationNumber, "body", "nonTinted"), x_scale = 1.0, y_scale = 1.0, render_layer = "object", target = position, surface = surface })
-    local tintedBaseGraphicId = rendering.draw_animation({ animation = Common.GetCarInVoidName(entityName, rotationNumber, "body", "tinted"), x_scale = 1.0, y_scale = 1.0, tint = carEntity.color, render_layer = "object", target = position, surface = surface })
-    local turretGraphicId = rendering.draw_animation({ animation = Common.GetCarInVoidName(entityName, rotationNumber, "turret", "nonTinted"), x_scale = 1.0, y_scale = 1.0, render_layer = "object", target = position, surface = surface })
-    local tintedTurretGraphicId = rendering.draw_animation({ animation = Common.GetCarInVoidName(entityName, rotationNumber, "turret", "tinted"), x_scale = 1.0, y_scale = 1.0, tint = carEntity.color, render_layer = "object", target = position, surface = surface })
-
-    local orientation = carEntity.orientation
 
     -- Remove the real vehicle.
     carEntity.destroy({ raise_destroy = true })

@@ -190,7 +190,6 @@ DrivenCar.CheckTrackedCars_EachTick = function(event)
                 goto EndOfMovingCarDetailsLoop
             elseif carHitName == "cliff" then
                 -- Work out how much damage will be done by this crash. The vehicles resistances will reduce this value.
-                game.print("hit cliff - " .. game.tick)
                 local damageToCar = DrivenCar.CalculateCarImpactDamage(movingCarDetails.name, movingCarDetails.oldSpeed) * global.drivenCar.settings.cliffCollisionDamageMultiplier
                 carEntity.damage(damageToCar, carEntity.force, "impact", carHitThing)
                 if not carEntity.valid then

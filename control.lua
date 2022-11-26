@@ -1,22 +1,32 @@
+local PlayerVehicle = require("scripts.player-vehicle")
+local DrivenCar = require("scripts.driven-car")
+local DrivenTrain = require("scripts.driven-train")
+
 local function CreateGlobals()
+    DrivenCar.CreateGlobals()
+    DrivenTrain.CreateGlobals()
 end
 
 local function OnLoad()
-	--Any Remote Interface registration calls can go in here or in root of control.lua
+    --Any Remote Interface registration calls can go in here or in root of control.lua
+    PlayerVehicle.OnLoad()
+    DrivenCar.OnLoad()
+    DrivenTrain.OnLoad()
 end
 
+---@param event EventData.on_runtime_mod_setting_changed|nil # nil value when called from OnStartup (on_init & on_configuration_changed)
 local function OnSettingChanged(event)
-    --if event == nil or event.setting == "xxxxx" then
-    --	local x = tonumber(settings.global["xxxxx"].value)
-    --end
+    DrivenCar.OnSettingChanged(event)
 end
 
 local function OnStartup()
     CreateGlobals()
-	OnLoad()
+    OnLoad()
     OnSettingChanged(nil)
-end
 
+    DrivenCar.OnStartup()
+    DrivenTrain.OnStartup()
+end
 
 script.on_init(OnStartup)
 script.on_configuration_changed(OnStartup)

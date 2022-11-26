@@ -22,7 +22,7 @@ MOD.scheduledEventNames or
         end
     }
 
----@class UtilityScheduledEvent_CallbackObject
+---@class UtilityScheduledEvent_CallbackObject # The object returned to the handler function when the event occurs.
 ---@field tick uint # The current game tick.
 ---@field name string # The name of the scheduled event, as registered with EventScheduler.RegisterScheduledEventType().
 ---@field instanceId string|number # The instanceId the event was scheduled with.
@@ -55,7 +55,7 @@ end
 ---
 --- Called from OnLoad() from each script file.
 ---@param eventName string
----@param eventFunctionCallback function # The callback function that is called when the scheduled event triggers. The callback function receives a single parameter of type UtilityScheduledEventCallbackObject with relevant information, including any custom data (eventData) populated during the scheduling.
+---@param eventFunctionCallback function # The callback function that is called when the scheduled event triggers. The callback function receives a single parameter of type UtilityScheduledEvent_CallbackObject with relevant information, including any custom data (eventData) populated during the scheduling.
 EventScheduler.RegisterScheduledEventType = function(eventName, eventFunctionCallback)
     if eventName == nil or eventFunctionCallback == nil then
         error("EventScheduler.RegisterScheduledEventType called with missing arguments")
@@ -75,7 +75,7 @@ end
 ---@param eventTick? UtilityScheduledEvent_UintNegative1 # A value of nil will be next tick, current or past ticks will fail. a value of -1 is a special input for current tick when used by events that run before the Factorio on_tick event, i.e. a custom input (key pressed for action) handler.
 ---@param eventName string # The event name used to lookup the function to call, as registered with EventScheduler.RegisterScheduledEventType().
 ---@param instanceId string|number # A unique Id to identify this scheduled event and its data for this eventName on the given tick.
----@param eventData? UtilityScheduledEvent_EventData # Custom table of data that will be returned to the triggered function when called as the "data" attribute of the UtilityScheduledEventCallbackObject object.
+---@param eventData? UtilityScheduledEvent_EventData # Custom table of data that will be returned to the triggered function when called as the "data" attribute of the UtilityScheduledEvent_CallbackObject object.
 ---@param currentTick uint # The current game tick.
 EventScheduler.ScheduleEventOnce = function(eventTick, eventName, instanceId, eventData, currentTick)
     if eventName == nil or instanceId == nil then

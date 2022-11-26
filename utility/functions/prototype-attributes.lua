@@ -18,6 +18,7 @@ MOD.UTILITYPrototypeAttributes_Prototypes = MOD.UTILITYPrototypeAttributes_Proto
 ---@param attributeName string
 ---@param prototype? LuaEntityPrototype|LuaItemPrototype|LuaFluidPrototype|LuaTilePrototype|LuaEquipmentPrototype|LuaRecipePrototype|LuaTechnologyPrototype # The LuaPrototype if its already cached somewhere to save having to obtain it if needed. Although once the value is cached for this prototypeName it won't need to be looked up again this game session.
 ---@return any # attribute value, can include nil.
+---@return nil|LuaEntityPrototype|LuaItemPrototype|LuaFluidPrototype|LuaTilePrototype|LuaEquipmentPrototype|LuaRecipePrototype|LuaTechnologyPrototype prototypeAttributeObtainedFrom # The LuaPrototype obtained if the attribute had to be looked up, otherwise nil. Useful if you pass in just a prototypeName and make subsequent requests for other attributes on the same prototype name, but don't know at calling time it the attributes have already been cached or not.
 PrototypeAttributes.GetAttribute = function(prototypeType, prototypeName, attributeName, prototype)
     local utilityPrototypeAttributes = MOD.UTILITYPrototypeAttributes
 
@@ -35,7 +36,7 @@ PrototypeAttributes.GetAttribute = function(prototypeType, prototypeName, attrib
 
     local attributeCache = prototypeCache[attributeName]
     if attributeCache ~= nil then
-        return attributeCache.value
+        return attributeCache.value, nil
     else
         -- If the prototype wasn't passed in then obtain it.
         if prototype == nil then
@@ -68,7 +69,7 @@ PrototypeAttributes.GetAttribute = function(prototypeType, prototypeName, attrib
         end
         local resultValue = prototype[attributeName] ---@type any
         prototypeCache[attributeName] = { value = resultValue }
-        return resultValue
+        return resultValue, prototype
     end
 end
 

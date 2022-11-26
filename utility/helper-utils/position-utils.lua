@@ -1,5 +1,10 @@
 --[[
     All position concept related utils functions, including bounding boxes.
+
+    Future Tasks:
+        - In the past I haven't had to deal with complicated orientated bounding boxes in detail, at most I just passed them back in to Factorio via na API call. Factorio API doesn't accept orientation on its BoundingBox specifications when we pass them in to the game via API. This is likely why we don't handle it in the past. This needs to be clearly defined and born in mind when adding documentation and enhancements. This means there are a number of limitations that I've found when trying to do detailed BoundingBox work:
+            - All of these functions that return a BoundingBox lose any passed in orientation value.
+            - Many of the functions ignore orientation, either explicitly or implicitly. Some handle it in specific listed ways.
 ]]
 --
 
@@ -95,7 +100,7 @@ end
 --- Return the positioned bounding box (collision box) of a bounding box applied to a position. Or nil if invalid data.
 ---@param centerPos MapPosition
 ---@param boundingBox BoundingBox
----@param orientation RealOrientation
+---@param orientation RealOrientation # Only supports 0, 0.25, 0.5, 0.75 and 1.
 ---@return BoundingBox?
 PositionUtils.ApplyBoundingBoxToPosition = function(centerPos, boundingBox, orientation)
     local checked_centerPos = PositionUtils.TableToProperPosition(centerPos)
@@ -160,7 +165,7 @@ PositionUtils.GetLeftTopTilePositionForChunkPosition = function(chunkPos)
     return { x = chunkPos.x * 32, y = chunkPos.y * 32 }
 end
 
---- Rotates an offset around position of {0,0}.
+--- Create a new position at a rotated offset around position of {0,0}.
 ---@param orientation RealOrientation
 ---@param position MapPosition
 ---@return MapPosition
@@ -194,7 +199,7 @@ PositionUtils.RotatePositionAround0 = function(orientation, position)
     return { x = rotatedX, y = rotatedY }
 end
 
---- Rotates an offset around a position. Combines PositionUtils.RotatePositionAround0() and PositionUtils.ApplyOffsetToPosition() to save UPS.
+--- Create a new position at a rotated offset to an existing position. Rotates an offset around a position. Combines PositionUtils.RotatePositionAround0() and PositionUtils.ApplyOffsetToPosition() to save UPS.
 ---@param orientation RealOrientation
 ---@param offset MapPosition # the position to be rotated by the orientation.
 ---@param position MapPosition # the position the rotated offset is applied to.
@@ -227,8 +232,8 @@ PositionUtils.RotateOffsetAroundPosition = function(orientation, offset, positio
     local rad = math_rad(orientation * 360)
     local cosValue = math_cos(rad)
     local sinValue = math_sin(rad)
-    local rotatedX = (position.x * cosValue) - (position.y * sinValue)
-    local rotatedY = (position.x * sinValue) + (position.y * cosValue)
+    local rotatedX = (offset.x * cosValue) - (offset.y * sinValue)
+    local rotatedY = (offset.x * sinValue) + (offset.y * cosValue)
     return { x = position.x + rotatedX, y = position.y + rotatedY }
 end
 
@@ -287,14 +292,32 @@ PositionUtils.CalculateBoundingBoxToIncludeAllBoundingBoxes = function(listOfBou
     return { left_top = { x = minX, y = minY }, right_bottom = { x = maxX, y = maxY } }
 end
 
--- Applies an offset to a position. If you are rotating the offset first consider using PositionUtils.RotateOffsetAroundPosition() as lower UPS than the 2 separate function calls.
+-- Create a new position at an offset to an existing position. If you are rotating the offset first consider using PositionUtils.RotateOffsetAroundPosition() as lower UPS than the 2 separate function calls.
 ---@param position MapPosition
 ---@param offset MapPosition
----@return MapPosition
+---@return MapPosition newPosition
 PositionUtils.ApplyOffsetToPosition = function(position, offset)
     return {
         x = position.x + offset.x,
         y = position.y + offset.y
+    }
+end
+
+-- Create a new boundingBox at an offset to an existing boundingBox.
+---@param boundingBox BoundingBox
+---@param offset MapPosition
+---@return BoundingBox newBoundingBox
+PositionUtils.ApplyOffsetToBoundingBox = function(boundingBox, offset)
+    ---@type BoundingBox
+    return {
+        left_top = {
+            x = boundingBox.left_top.x + offset.x,
+            y = boundingBox.left_top.y + offset.y
+        },
+        right_bottom = {
+            x = boundingBox.right_bottom.x + offset.x,
+            y = boundingBox.right_bottom.y + offset.y
+        }
     }
 end
 
@@ -347,6 +370,8 @@ PositionUtils.CalculateBoundingBoxFromPositionAndRange = function(position, rang
 end
 
 --- Calculate a list of tile positions that are within a bounding box.
+---
+--- Ignores the `orientation` field of the positionedBoundingBox, and assumes its always 0.
 ---@param positionedBoundingBox BoundingBox
 ---@return MapPosition[]
 PositionUtils.CalculateTilesUnderPositionedBoundingBox = function(positionedBoundingBox)
@@ -417,6 +442,7 @@ PositionUtils.GetOffsetForPositionFromPosition = function(newPosition, basePosit
     return { x = newPosition.x - basePosition.x, y = newPosition.y - basePosition.y }
 end
 
+--- Check if a position is within a BoundingBox. Ignores any orientation on the BoundingBox.
 ---@param position MapPosition
 ---@param boundingBox BoundingBox
 ---@param safeTiling? boolean # If enabled the BoundingBox can be tiled without risk of an entity on the border being in 2 result sets, i.e. for use on each chunk.
@@ -529,6 +555,116 @@ PositionUtils.FindWhereLineCrossesCircle = function(radius, slope, yIntercept)
             return pos1, pos2
         end
     end
+end
+
+--- See if 2 polygons collide with each other.
+---
+--- Code from: https://stackoverflow.com/a/10965077
+---@param polygonAPoints MapPosition[]
+---@param polygonBPoints MapPosition[]
+---@return boolean boundingBoxesCollide
+PositionUtils.Do2RotatedBoundingBoxesCollide = function(polygonAPoints, polygonBPoints)
+    for _, polygon in pairs({ polygonAPoints, polygonBPoints }) do
+        for i1 = 1, #polygon do
+            local i2 = (i1 % #polygon) + 1
+            local p1 = polygon[i1]
+            local p2 = polygon[i2]
+
+            local normal = { x = p2.y - p1.y, y = p1.x - p2.x } --[[@as MapPosition]]
+
+            local minA, maxA
+            for _, p in pairs(polygonAPoints) do
+                local projected = normal.x * p.x + normal.y * p.y
+                if (minA == nil or projected < minA) then
+                    minA = projected
+                end
+                if (maxA == nil or projected > maxA) then
+                    maxA = projected
+                end
+            end
+
+            local minB, maxB
+            for _, p in pairs(polygonBPoints) do
+                local projected = normal.x * p.x + normal.y * p.y
+                if (minB == nil or projected < minB) then
+                    minB = projected
+                end
+                if (maxB == nil or projected > maxB) then
+                    maxB = projected
+                end
+            end
+
+            if (maxA < minB or maxB < minA) then
+                return false
+            end
+        end
+    end
+    return true
+end
+
+--- Get an array of MapPosition points from a collision box at a given position, handles all orientations.
+---@param collisionBox BoundingBox
+---@param centerPosition MapPosition
+---@param orientation RealOrientation
+---@return MapPosition[]
+PositionUtils.MakePolygonMapPointsFromOrientatedCollisionBox = function(collisionBox, orientation, centerPosition)
+    local polygon = {} ---@type MapPosition[]
+
+    polygon[1] = PositionUtils.RotateOffsetAroundPosition(orientation, collisionBox.left_top, centerPosition)
+    polygon[2] = PositionUtils.RotateOffsetAroundPosition(orientation, { x = collisionBox.right_bottom.x, y = collisionBox.left_top.y }, centerPosition)
+    polygon[3] = PositionUtils.RotateOffsetAroundPosition(orientation, collisionBox.right_bottom, centerPosition)
+    polygon[4] = PositionUtils.RotateOffsetAroundPosition(orientation, { x = collisionBox.left_top.x, y = collisionBox.right_bottom.y }, centerPosition)
+
+    return polygon
+end
+
+--- Get an array of MapPosition points from a bounding box (positioned collision box) rotated around a given position, handles all orientations.
+---
+--- If the position is outside of the bounding box then it will appear to rotate the bounding box as an offset from this. It is technically the same as if the position is within the bounding box, but the effects can feel quite different. Best seen with some polygon renders of the results.
+---@param boundingBox BoundingBox
+---@param centerPosition MapPosition
+---@param orientation RealOrientation
+---@return MapPosition[]
+PositionUtils.MakePolygonMapPointsFromOrientatedBoundingBox = function(boundingBox, orientation, centerPosition)
+    local polygon = {} ---@type MapPosition[]
+
+    polygon[1] = PositionUtils.RotateOffsetAroundPosition(orientation, { x = boundingBox.left_top.x - centerPosition.x, y = boundingBox.left_top.y - centerPosition.y }, centerPosition)
+    polygon[2] = PositionUtils.RotateOffsetAroundPosition(orientation, { x = boundingBox.right_bottom.x - centerPosition.x, y = boundingBox.left_top.y - centerPosition.y }, centerPosition)
+    polygon[3] = PositionUtils.RotateOffsetAroundPosition(orientation, { x = boundingBox.right_bottom.x - centerPosition.x, y = boundingBox.right_bottom.y - centerPosition.y }, centerPosition)
+    polygon[4] = PositionUtils.RotateOffsetAroundPosition(orientation, { x = boundingBox.left_top.x - centerPosition.x, y = boundingBox.right_bottom.y - centerPosition.y }, centerPosition)
+
+    return polygon
+
+    -- Test code to demonstrate how it behaves. Change `centerPos` to be inside or outside of the `boundingBox`.
+    --[[
+        ---@type BoundingBox
+        local boundingBox = { left_top = { x = -3, y = -2 }, right_bottom = { x = 2, y = 1 } }
+        local centerPos = { x = 5, y = 5 }
+
+        local surface = game.surfaces[1] --[ [@as LuaSurface] ]
+        rendering.draw_circle({ surface = surface, color = { 0.0, 0.0, 0.0, 1.0 }, radius = 0.1, filled = true, target = centerPos })
+
+
+        local colorCount = 1
+        local colors = { { 1.0, 0.0, 0.0, 1.0 }, { 0.0, 1.0, 0.0, 1.0 }, { 0.0, 0.0, 1.0, 1.0 } }
+        local rotationCount = 24
+        for rotation = 0, rotationCount - 1 do
+            local orientation = rotation / rotationCount --[ [@as RealOrientation] ]
+            if rotation == 0 then orientation = 0.0 end
+
+            local vertices = {} ---@type table[]
+            for i, pos in pairs(PositionUtils.MakePolygonMapPointsFromOrientatedBoundingBox(boundingBox, orientation, centerPos)) do
+                vertices[i] = { target = pos }
+            end
+            vertices[5] = vertices[1]
+
+            local color = colors[colorCount]
+            rendering.draw_polygon({ surface = surface, color = color, vertices = vertices, draw_on_ground = true })
+
+            colorCount = colorCount + 1
+            if colorCount > 3 then colorCount = 1 end
+        end
+    ]]
 end
 
 --- Check if a position is within a circles area.

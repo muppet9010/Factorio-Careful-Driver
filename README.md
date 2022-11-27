@@ -36,6 +36,8 @@ Mod Compatibility
 Future Ideas
 ------------
 
+- Players can walk in to the water or void and treated similar to how vehicles are currently. Also player walking in to water would tie in to a player getting out of a car stuck in the water.
+- Players can fall down cliffs going high to low side of the cliff. Does a percentage of max health damage, ignoring shields.
 - Trains that are driven to the end of a rail track will derail.
 - Trains won't stop instantly when they loose their path. Instead they will have to slow down at their max breaking speed. This will take effect when a player messes with a trains orders while its moving or removes rail track in a rail network.
 - No plans for spider-vehicles walking in to water or off the map (void tiles). As the vehicle is "smart" due to its fish brain and only puts feet where they are safe. They also don't try to over reach with feet in to unstable positions.

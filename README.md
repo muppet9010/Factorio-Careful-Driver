@@ -8,7 +8,7 @@ Encourages players to be careful drivers via negative reinforcement.
 
 #### Cars and tanks are hurt driving in to cliffs. When they fall in to water they need to be recovered, which if they fall off the edge of the map they are gone.
 
-![Car & Tanks Demo 3](https://thumbs.gfycat.com/NaiveUnacceptableBlueandgoldmackaw-mobile.mp4)
+![Car & Tanks Demo 3](https://thumbs.gfycat.com/TameEquatorialLangur-mobile.mp4)
 
 
 

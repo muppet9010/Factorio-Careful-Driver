@@ -2,3 +2,5 @@ Bugs:
 
 
 To Add:
+    - Players can walk in to the water or void and treated similar to how vehicles are currently. Also player walking in to water would tie in to a player getting out of a car stuck in the water.
+    - Players can fall down cliffs going high to low side of the cliff. Does a percentage of max health damage, ignoring shields.

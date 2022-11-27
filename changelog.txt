@@ -5,6 +5,7 @@ Date: 2022-XXX-XXX
   Changes:
   Bugfixes:
   Info:
+    - Added thumbnail as forgot in original version.
 ---------------------------------------------------------------------------------------------------
 Version: 1.0.0
 Date: 2022-11-26

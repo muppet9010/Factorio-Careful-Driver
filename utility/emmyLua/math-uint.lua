@@ -9,6 +9,8 @@
 ---@class mathlib_uint
 math_uint = math --[[@as mathlib_uint]]
 
+--[[
+
 ---#DES 'math.abs'
 ---@param x uint
 ---@return uint
@@ -281,5 +283,7 @@ end
 ---@nodiscard
 function math_uint.ult(m, n)
 end
+
+]]
 
 return math

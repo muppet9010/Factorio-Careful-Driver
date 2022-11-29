@@ -13,6 +13,8 @@
 ---@class mathlib_generic
 math_generic = math --[[@as mathlib_generic]]
 
+--[[
+
 ---#DES 'math_generic.abs'
 ---@param x number
 ---@return number
@@ -298,5 +300,7 @@ end
 ---@nodiscard
 function math_generic.ult(m, n)
 end
+
+]]
 
 return math

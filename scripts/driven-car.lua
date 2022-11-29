@@ -147,7 +147,7 @@ DrivenCar.CheckTrackedCars_EachTick = function(event)
             goto UpdateCarDataInMovingCarDetailsLoop
         end
 
-        currentSpeed = carEntity.speed ---@cast currentSpeed - nil # Cars always have a speed field.
+        currentSpeed = carEntity.speed ---@cast currentSpeed -nil # Cars always have a speed field.
 
         -- Check if the car was not moving last tick. As if not then it can't have stopped this tick due to a collision.
         if movingCarDetails.oldSpeed == 0 then

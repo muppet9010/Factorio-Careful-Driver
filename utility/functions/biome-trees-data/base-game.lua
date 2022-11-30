@@ -2,7 +2,7 @@
 
 
 local TableUtils = require("utility.helper-utils.table-utils")
-local Data = {} ---@class Utility_BiomeTrees_BaseGame
+local Data = {} ---@class Utility_BiomeTrees_BaseGame_Class
 
 --[[
     These values are lifted from Factorio source code files. \data\base\prototypes\tile\tiles.lua

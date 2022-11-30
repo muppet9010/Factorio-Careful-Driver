@@ -29,7 +29,7 @@ local math_min, math_max, math_random = math.min, math.max, math.random
 local BaseGameData = require("utility.functions.biome-trees-data.base-game")
 local AlienBiomesData = require("utility.functions.biome-trees-data.alien-biomes")
 
-local BiomeTrees = {} ---@class Utility_BiomeTrees
+local BiomeTrees = {} ---@class Utility_BiomeTrees_Class
 
 --- Debug testing/logging options. Al should be false in releases.
 local LogPlacedNonPositives = false

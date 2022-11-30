@@ -4,7 +4,7 @@
 
 -- cSpell:words Nixie
 
-local MathUtils = {} ---@class Utility_MathUtils
+local MathUtils = {} ---@class Utility_MathUtils_Class
 local math_min, math_max, math_floor, math_random, math_sin, math_cos, math_atan2, math_pi = math.min, math.max, math.floor, math.random, math.sin, math.cos, math.atan2, math.pi
 local math_pi2 = math_pi * 2
 

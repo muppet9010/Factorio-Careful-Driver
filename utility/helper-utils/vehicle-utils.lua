@@ -1,6 +1,6 @@
 -- Helper functions that apply across all vehicle types.
 
-local VehicleUtils = {} ---@class Utility_VehicleUtils
+local VehicleUtils = {} ---@class Utility_VehicleUtils_Class
 
 --- Checks the vehicle for its current fuel and returns it's prototype. Checks fuel inventories if nothing is currently burning.
 ---@param vehicle LuaEntity

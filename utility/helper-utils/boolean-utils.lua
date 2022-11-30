@@ -3,7 +3,7 @@
 ]]
 --
 
-local BooleanUtils = {} ---@class Utility_BooleanUtils
+local BooleanUtils = {} ---@class Utility_BooleanUtils_Class
 local string_lower = string.lower
 
 --- Tries to converts a non boolean to a boolean value.

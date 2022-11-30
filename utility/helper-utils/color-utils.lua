@@ -3,7 +3,7 @@
 ]]
 --
 
-local ColorUtils = {} ---@class Utility_ColorUtils
+local ColorUtils = {} ---@class Utility_ColorUtils_Class
 
 --TASK: write a function that gets a random non already used color and returns it. Must store this data in globals and have it take a "colorPurposeName" so it can be run multiple times concurrently.
 -- Railway tunnel mod did the below:

@@ -4,7 +4,7 @@
     Values stored in Lua global variable and populated as requested, as doesn't need persisting. Gets auto refreshed on game load and thus automatically accounts for any change of attributes from mods. Also means the cached values aren't stored in save state or shared between players.
 --]]
 
-local PrototypeAttributes = {} ---@class Utility_PrototypeAttributes
+local PrototypeAttributes = {} ---@class Utility_PrototypeAttributes_Class
 
 MOD = MOD or {} ---@class MOD
 MOD.UTILITYPrototypeAttributes = MOD.UTILITYPrototypeAttributes or {} ---@type UtilityPrototypeAttributes_CachedTypes

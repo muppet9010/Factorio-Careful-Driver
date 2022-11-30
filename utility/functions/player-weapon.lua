@@ -3,7 +3,7 @@
 
     Usage: Call any public functions (not starting with "_") as required.
 ]]
-local PlayerWeapon = {} ---@class Utility_PlayerWeapon
+local PlayerWeapon = {} ---@class Utility_PlayerWeapon_Class
 
 ----------------------------------------------------------------------------------
 --                          PUBLIC FUNCTIONS
@@ -156,7 +156,7 @@ PlayerWeapon.EnsureHasWeapon = function(player, weaponName, forceWeaponToWeaponI
             -- Ammo in the slot so need to check its compatible with the gun.
 
             -- Clear the current ammo stack ready for the the planned ammo if not compatible with the gun.
-            local ammoType = ammoItemStack.prototype.get_ammo_type("player") ---@cast ammoType - nil
+            local ammoType = ammoItemStack.prototype.get_ammo_type("player") ---@cast ammoType -nil
             local ammoIsCompatibleWithGun = PlayerWeapon.IsAmmoCompatibleWithWeapon(ammoType, game.item_prototypes[weaponName])
             if not ammoIsCompatibleWithGun then
                 -- Move it to the players inventory, or the floor.
@@ -274,14 +274,14 @@ end
 ---@param weaponItemPrototype LuaItemPrototype
 ---@return boolean compatible
 PlayerWeapon.IsAmmoCompatibleWithWeapon = function(ammoType, weaponItemPrototype)
-    local weapon_attackParameters = weaponItemPrototype.attack_parameters ---@cast weapon_attackParameters - nil # Is mandatory for `gun` type items. This will error if a non `gun` weaponItemPrototype is passed in, but that should be validated outside of this.
+    local weapon_attackParameters = weaponItemPrototype.attack_parameters ---@cast weapon_attackParameters -nil # Is mandatory for `gun` type items. This will error if a non `gun` weaponItemPrototype is passed in, but that should be validated outside of this.
 
     -- If the weapon has an ammo_type specified then it doesn't take any external ammo type, but generates its own attack effect. So the ammo is never the right type for this weapon. It may still have a category specified, but this doesn't really matter.
     if weapon_attackParameters.ammo_type ~= nil then return false end
 
     -- There is a weapon list so check if the specific ammo category is in the weapon's category list.
     local currentAmmoType_category = ammoType.category
-    local weapon_categories = weapon_attackParameters.ammo_categories ---@cast weapon_categories - nil # If there's no ammo_type on the weapon prototype it must have categories.
+    local weapon_categories = weapon_attackParameters.ammo_categories ---@cast weapon_categories -nil # If there's no ammo_type on the weapon prototype it must have categories.
     for _, weapon_category in pairs(weapon_categories) do
         if currentAmmoType_category == weapon_category then return true end
     end

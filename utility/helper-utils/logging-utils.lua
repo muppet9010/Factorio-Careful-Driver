@@ -1,7 +1,7 @@
 --- Logging and debugging functions.
 --- Requires the utility "constants" file to be populated within the root of the mod.
 
-local LoggingUtils = {} ---@class Utility_LoggingUtils
+local LoggingUtils = {} ---@class Utility_LoggingUtils_Class
 local Constants = require("constants")
 local StringUtils = require("utility.helper-utils.string-utils")
 local TableUtils = require("utility.helper-utils.table-utils")

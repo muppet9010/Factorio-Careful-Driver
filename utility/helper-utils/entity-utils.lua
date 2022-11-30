@@ -3,7 +3,7 @@
 ]]
 --
 
-local EntityUtils = {} ---@class Utility_EntityUtils
+local EntityUtils = {} ---@class Utility_EntityUtils_Class
 local PositionUtils = require("utility.helper-utils.position-utils")
 
 local MovablePrototypeTypes = { unit = "unit", character = "character", car = "car", tank = "tank", ["spider-vehicle"] = "spider-vehicle" }

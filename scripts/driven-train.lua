@@ -2,7 +2,7 @@
     This tracks a train from the point a player gets in to the train until the player gets out of the train and the train is set to non manual control.
 ]]
 
-local DrivenTrain = {} ---@class DrivenTrain
+local DrivenTrain = {} ---@class DrivenTrain_Class
 local Events = require("utility.manager-libraries.events")
 local EventScheduler = require("utility.manager-libraries.event-scheduler")
 

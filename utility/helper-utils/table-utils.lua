@@ -3,7 +3,7 @@
 ]]
 --
 
-local TableUtils = {} ---@class Utility_TableUtils
+local TableUtils = {} ---@class Utility_TableUtils_Class
 local string_rep = string.rep
 
 -- cSpell:ignore deepcopy # Ignore in this file, but don't add as shouldn't be seen outside this reference to the core util.lua file.

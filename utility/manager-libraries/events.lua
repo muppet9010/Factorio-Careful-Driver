@@ -12,7 +12,7 @@
 
 local TableUtils = require("utility.helper-utils.table-utils")
 
-local Events = {} ---@class Utility_Events
+local Events = {} ---@class Utility_Events_Class
 MOD = MOD or {} ---@class MOD
 MOD.eventsById = MOD.eventsById or {} ---@type table<defines.events|uint, UtilityEvents_EventHandlerObject[]>
 MOD.eventIdHandlerNameToEventIdsListIndex = MOD.eventIdHandlerNameToEventIdsListIndex or {} ---@type table<defines.events|uint, table<string, int>> A way to get the id key from MOD.eventsById for a specific event id and handler name.

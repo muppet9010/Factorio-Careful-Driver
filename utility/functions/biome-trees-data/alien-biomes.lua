@@ -1,5 +1,5 @@
 -- Alien Biomes - 0.6.8
-local Data = {} ---@class Utility_BiomeTrees_AlienBiomes
+local Data = {} ---@class Utility_BiomeTrees_AlienBiomes_Class
 
 -- Custom words for spell check.
 -- cSpell:words dustyrose dryland

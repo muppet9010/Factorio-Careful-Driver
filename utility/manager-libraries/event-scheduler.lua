@@ -10,7 +10,7 @@
 ]]
 
 local Events = require("utility.manager-libraries.events")
-local EventScheduler = {} ---@class Utility_EventScheduler
+local EventScheduler = {} ---@class Utility_EventScheduler_Class
 MOD = MOD or {} ---@class MOD
 ---@type table<string, function>
 MOD.scheduledEventNames =

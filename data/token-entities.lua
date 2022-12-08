@@ -6,13 +6,13 @@ local tokenWaterTile = {
     name = "careful_driver-token_water_entity",
     icons = {
         {
-            icon = "__base__/graphics/terrain/water/hr-water-O.png",
+            icon = "__base__/graphics/terrain/water/hr-water-o.png",
             icon_size = 64,
             scale = 0.5
         }
     },
     picture = {
-        filename = "__base__/graphics/terrain/water/hr-water-O.png",
+        filename = "__base__/graphics/terrain/water/hr-water-o.png",
         height = 64,
         width = 64,
         scale = 0.5

@@ -38,44 +38,63 @@ for _, carPrototype in pairs(data.raw["car"]) do
     end
 
     -- Loop over each rotated animation layer for the main animation and turret. We will need to extract each rotation graphic from each layer in to our animation prototypes. The turret will always be pointing forwards for this, as otherwise we have to make a separate graphic for the turret.
-    ---@type "body"|"turret", RotatedAnimation[]
-    for partName, animationPart in pairs({ body = carPrototype.animation.layers, turret = carPrototype.turret_animation.layers }) do
-        if animationPart ~= nil then
-            for _, rotatedAnimation in pairs(animationPart) do
-                local rotatedAnimationBase = TableUtils.DeepCopy(rotatedAnimation) --[[@as RotatedAnimation ]]
+    -- If there aren't layers then we treat the single animation definition as a single layer.
+    local animationParts = {} ---@type table<"body"|"turret", RotatedAnimation[]>
+    if carPrototype.animation ~= nil then
+        if carPrototype.animation.layers ~= nil then
+            animationParts.body = carPrototype.animation.layers
+        else
+            animationParts.body = { carPrototype.animation }
+        end
+    end
+    if carPrototype.turret_animation ~= nil then
+        if carPrototype.turret_animation.layers ~= nil then
+            animationParts.turret = carPrototype.turret_animation.layers
+        else
+            animationParts.turret = { carPrototype.turret_animation }
+        end
+    end
+    for partName, animationPart in pairs(animationParts) do
+        if animationPart == nil then goto EndOfThis_AnimationParts_LoopInstance end
 
-                -- We either do the hr_version or regular, don't bother with both.
-                if rotatedAnimationBase.hr_version ~= nil then
-                    rotatedAnimationBase = rotatedAnimationBase.hr_version
-                end
+        for _, rotatedAnimation in pairs(animationPart) do
+            local rotatedAnimationBase = TableUtils.DeepCopy(rotatedAnimation) --[[@as RotatedAnimation ]]
 
-                -- Trim the layer info down so its just an animation.
-                rotatedAnimationBase.direction_count = nil
-                local animationBase = rotatedAnimationBase --[[@as Animation]]
+            -- We either do the hr_version or regular, don't bother with both.
+            if rotatedAnimationBase.hr_version ~= nil then
+                rotatedAnimationBase = rotatedAnimationBase.hr_version
+            end
 
-                -- Handle the filename specification format.
-                if animationBase.stripes ~= nil then
-                    -- Loop over the stripes entries.
+            -- Trim the layer info down so its just an animation.
+            rotatedAnimationBase.direction_count = nil
+            local animationBase = rotatedAnimationBase --[[@as Animation]]
 
-                    local rotationCount = 0
-                    local stripeFilesAlreadyDone = {} ---@type table<string, true> # Some animation stripes have the same same stripe multiple times to bulk up the frame count (double use the same frame image). This is needed in the original defs as other layers have additional frames per rotation and they all need the same number.
+            -- Handle the filename specification format.
+            if animationBase.stripes ~= nil then
+                -- Loop over the stripes entries.
 
-                    for _, stripe in pairs(animationBase.stripes) do
-                        -- Check this stripe filename hasn't already been processed (duplicate stripes).
-                        if not stripeFilesAlreadyDone[stripe.filename] then
-                            stripeFilesAlreadyDone[stripe.filename] = true
+                local rotationCount = 0
+                local stripeFilesAlreadyDone = {} ---@type table<string, true> # Some animation stripes have the same same stripe multiple times to bulk up the frame count (double use the same frame image). This is needed in the original defs as other layers have additional frames per rotation and they all need the same number.
 
-                            -- For each rotation in the stripe push the details to the Animation prototype.
-                            for stripeInnerCount = 1, stripe.height_in_frames do
+                for _, stripe in pairs(animationBase.stripes) do
+                    -- Check this stripe filename hasn't already been processed (duplicate stripes).
+                    if not stripeFilesAlreadyDone[stripe.filename] then
+                        stripeFilesAlreadyDone[stripe.filename] = true
+
+                        -- For each rotation in the stripe push the details to the Animation prototype.
+                        local stripeInnerCount = 1
+                        for heightCount = 1, stripe.height_in_frames do
+                            for widthCount = 1, stripe.width_in_frames, animationBase.frame_count do
                                 rotationCount = rotationCount + 1
                                 local carRotationInVoid_layer = {} ---@type Animation
 
                                 -- Extract the stripe details and push them to the new layer.
                                 carRotationInVoid_layer.filename = stripe.filename
                                 -- Select the right bit of the sprite for our specific frame row.
-                                carRotationInVoid_layer.y = (stripeInnerCount - 1) * animationBase.height --[[@as int16]]
+                                carRotationInVoid_layer.x = (widthCount - 1) * animationBase.width --[[@as int16]]
+                                carRotationInVoid_layer.y = (heightCount - 1) * animationBase.height --[[@as int16]]
 
-                                -- If this stripe doesn't have the right number of frames then just duplicate them. The original structure duplicated the stripes to make up for it, but we are ignoring duplicated stripes as they just make things weird to process.
+                                -- If this stripe doesn't have the right number of frames then just duplicate the first one, don't worry about trying to handle odd multiplications. The original vanilla car and tank structure duplicated the stripes to make up for it, but we are ignoring duplicated stripes as they just make things weird to process.
                                 if stripe.width_in_frames ~= targetFrameCount then
                                     carRotationInVoid_layer.frame_count = 1
                                     carRotationInVoid_layer.repeat_count = targetFrameCount --[[@as uint8 # Just hope its ok, more than 255 animation frames would be an excessively large vehicle graphic.]]
@@ -117,70 +136,81 @@ for _, carPrototype in pairs(data.raw["car"]) do
                                     end
                                 end
                                 carRotationInVoid.layers[#carRotationInVoid.layers + 1] = carRotationInVoid_layer
+                                stripeInnerCount = stripeInnerCount + 1
+                                if stripeInnerCount == directionCount then
+                                    -- Some mods have empty gaps at the end of their sprite sheets.
+                                    break
+                                end
+                            end
+                            if stripeInnerCount == directionCount then
+                                -- Some mods have empty gaps at the end of their sprite sheets.
+                                break
                             end
                         end
                     end
-                else
-                    -- Is a straight filename.
+                end
+            else
+                -- Is a straight filename.
 
-                    -- For each rotation push the details to the Animation prototype.
-                    for rotationCount = 1, directionCount do
-                        local carRotationInVoid_layer = {} ---@type Animation
+                -- For each rotation push the details to the Animation prototype.
+                for rotationCount = 1, directionCount do
+                    local carRotationInVoid_layer = {} ---@type Animation
 
-                        -- Select the right bit of the animations for our specific frame row.
-                        -- This is likely a grid of animations, so need to find the right one for our rotation.
-                        local rotationsPerLine = animationBase.line_length / animationBase.frame_count
-                        local yLine = math.floor((rotationCount - 1) / rotationsPerLine)
-                        carRotationInVoid_layer.y = yLine * animationBase.height --[[@as int16]]
-                        local xLine = (rotationCount - ((yLine * rotationsPerLine) + 1)) * animationBase.frame_count
-                        carRotationInVoid_layer.x = xLine * animationBase.width --[[@as int16]]
+                    -- Select the right bit of the animations for our specific frame row.
+                    -- This is likely a grid of animations, so need to find the right one for our rotation.
+                    local rotationsPerLine = animationBase.line_length / animationBase.frame_count
+                    local yLine = math.floor((rotationCount - 1) / rotationsPerLine)
+                    carRotationInVoid_layer.y = yLine * animationBase.height --[[@as int16]]
+                    local xLine = (rotationCount - ((yLine * rotationsPerLine) + 1)) * animationBase.frame_count
+                    carRotationInVoid_layer.x = xLine * animationBase.width --[[@as int16]]
 
-                        -- If this animation doesn't have the right number of frames then just duplicate them. The original structure duplicated the animations to make up for it, but we are ignoring duplicated animations as they just make things weird to process.
-                        if animationBase.frame_count ~= targetFrameCount then
-                            carRotationInVoid_layer.frame_count = 1
-                            carRotationInVoid_layer.repeat_count = targetFrameCount --[[@as uint8 # Just hope its ok, more than 255 animation frames would be an excessively large vehicle graphic.]]
-                            carRotationInVoid_layer.line_length = 1
+                    -- If this animation doesn't have the right number of frames then just duplicate the first one, don't worry about trying to handle odd multiplications. The original vanilla car and tank structure duplicated the animations to make up for it, but we are ignoring duplicated animations as they just make things weird to process.
+                    if animationBase.frame_count ~= targetFrameCount then
+                        carRotationInVoid_layer.frame_count = 1
+                        carRotationInVoid_layer.repeat_count = targetFrameCount --[[@as uint8 # Just hope its ok, more than 255 animation frames would be an excessively large vehicle graphic.]]
+                        carRotationInVoid_layer.line_length = 1
+                    else
+                        carRotationInVoid_layer.frame_count = targetFrameCount
+                        carRotationInVoid_layer.repeat_count = animationBase.repeat_count
+                        carRotationInVoid_layer.line_length = animationBase.line_length
+                    end
+
+                    -- For each field in the main animation details add them to the animation prototype.
+                    for fieldName, value in pairs(animationBase--[[@as table<string, any> # We treat the source as just a dictionary to be looped over.]] ) do
+                        if fieldName ~= "frame_count" and fieldName ~= "repeat_count" and fieldName ~= "line_length" and fieldName ~= "max_advance" then
+                            ---@cast carRotationInVoid_layer table<string, any> # Just treat the carRotationInVoid object as a dictionary for this process.
+                            carRotationInVoid_layer[fieldName] = value
+                        end
+                    end
+
+                    -- Just blindly set some values to avoid errors.
+                    carRotationInVoid_layer.max_advance = maxAdvance
+
+                    -- Record this new layer to our Animation.
+                    local carRotationInVoid
+                    if partName == "body" then
+                        if not carRotationInVoid_layer.apply_runtime_tint then
+                            -- Standard Animation that isn't tinted at run time.
+                            carRotationInVoid = carBodyRotationsInVoid[rotationCount]
                         else
-                            carRotationInVoid_layer.frame_count = targetFrameCount
-                            carRotationInVoid_layer.repeat_count = animationBase.repeat_count
-                            carRotationInVoid_layer.line_length = animationBase.line_length
+                            -- Animation that can be tinted to player color at run time.
+                            carRotationInVoid = tintableCarBodyRotationsInVoid[rotationCount]
                         end
-
-                        -- For each field in the main animation details add them to the animation prototype.
-                        for fieldName, value in pairs(animationBase--[[@as table<string, any> # We treat the source as just a dictionary to be looped over.]] ) do
-                            if fieldName ~= "frame_count" and fieldName ~= "repeat_count" and fieldName ~= "line_length" and fieldName ~= "max_advance" then
-                                ---@cast carRotationInVoid_layer table<string, any> # Just treat the carRotationInVoid object as a dictionary for this process.
-                                carRotationInVoid_layer[fieldName] = value
-                            end
+                    elseif partName == "turret" then
+                        if not carRotationInVoid_layer.apply_runtime_tint then
+                            -- Standard Animation that isn't tinted at run time.
+                            carRotationInVoid = carTurretRotationsInVoid[rotationCount]
+                        else
+                            -- Animation that can be tinted to player color at run time.
+                            carRotationInVoid = tintableCarTurretRotationsInVoid[rotationCount]
                         end
-
-                        -- Just blindly set some values to avoid errors.
-                        carRotationInVoid_layer.max_advance = maxAdvance
-
-                        -- Record this new layer to our Animation.
-                        local carRotationInVoid
-                        if partName == "body" then
-                            if not carRotationInVoid_layer.apply_runtime_tint then
-                                -- Standard Animation that isn't tinted at run time.
-                                carRotationInVoid = carBodyRotationsInVoid[rotationCount]
-                            else
-                                -- Animation that can be tinted to player color at run time.
-                                carRotationInVoid = tintableCarBodyRotationsInVoid[rotationCount]
-                            end
-                        elseif partName == "turret" then
-                            if not carRotationInVoid_layer.apply_runtime_tint then
-                                -- Standard Animation that isn't tinted at run time.
-                                carRotationInVoid = carTurretRotationsInVoid[rotationCount]
-                            else
-                                -- Animation that can be tinted to player color at run time.
-                                carRotationInVoid = tintableCarTurretRotationsInVoid[rotationCount]
-                            end
-                        end
-                        carRotationInVoid.layers[#carRotationInVoid.layers + 1] = carRotationInVoid_layer
                     end
+                    carRotationInVoid.layers[#carRotationInVoid.layers + 1] = carRotationInVoid_layer
                 end
             end
         end
+
+        ::EndOfThis_AnimationParts_LoopInstance::
     end
 
     -- If any of the animations are empty for this vehicle add an empty sprite to them. As runtime can't know what exists and doesn't easily.

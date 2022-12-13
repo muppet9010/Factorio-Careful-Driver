@@ -63,7 +63,7 @@ end
 --- Called from OnLoad() from each script file. Registers the custom inputs (key bindings) as their names in Factorio and the handler function for all just custom inputs. These are handled specially in Factorio.
 ---@param actionName string # custom input name (key binding).
 ---@param handlerName string # Unique handler name.
----@param handlerFunction fun(eventData: CustomInputEvent) # Function to be triggered on action.
+---@param handlerFunction fun(eventData: EventData.CustomInputEvent) # Function to be triggered on action.
 Events.RegisterHandlerCustomInput = function(actionName, handlerName, handlerFunction)
     if actionName == nil then
         error("Events.RegisterHandlerCustomInput called with missing arguments")

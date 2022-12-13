@@ -701,7 +701,7 @@ DrivenCar.CarContinuingToEnterVoid = function(carEnteringVoid)
 end
 
 --- Called when a player presses the key to enter/exit a vehicle.
----@param event CustomInputEvent
+---@param event EventData.CustomInputEvent
 DrivenCar.OnToggleDriving_CustomInput = function(event)
     local player = game.get_player(event.player_index) ---@cast player -nil
     local vehicle = player.vehicle

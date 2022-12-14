@@ -22,7 +22,7 @@
 
 -- CODE NOTE: at present the data stage prototypes for GuiStyle are too incomplete to be added to this. 2022-07-26.
 
-local StyleData = {} ---@class Utility_StyleData
+local StyleData = {} ---@class Utility_StyleData_Class
 
 local Colors = require("utility.lists.colors")
 

@@ -2,7 +2,7 @@
 -- Requires the utility "constants" file to be populated within the root of the mod.
 -- Designed on the basis that the mod doesn't need to store references to the GUI Elements it creates and the structures involved with that. As they can all be obtained via the managed storage with the element name and type to improve code readability.
 
-local GuiUtil = {} ---@class Utility_GuiUtil
+local GuiUtil = {} ---@class Utility_GuiUtil_Class
 local GuiActionsClick = require("utility.manager-libraries.gui-actions-click")
 local GuiActionsChecked = require("utility.manager-libraries.gui-actions-checked")
 local LoggingUtils = require("utility.helper-utils.logging-utils")

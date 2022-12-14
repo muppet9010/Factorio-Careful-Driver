@@ -8,7 +8,7 @@
 ]]
 --
 
-local PositionUtils = {} ---@class Utility_PositionUtils
+local PositionUtils = {} ---@class Utility_PositionUtils_Class
 local MathUtils = require("utility.helper-utils.math-utils")
 local math_rad, math_cos, math_sin, math_floor, math_sqrt, math_abs, math_random = math.rad, math.cos, math.sin, math.floor, math.sqrt, math.abs, math.random
 

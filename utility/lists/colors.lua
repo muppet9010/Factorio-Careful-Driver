@@ -2,7 +2,7 @@
 
 -- CODE NOTE: Can't use generics on the class as then it can't spot usage of invalid ones.
 
-local Colors = {} ---@class Utility_Colors
+local Colors = {} ---@class Utility_Colors_Class
 --https://www.rapidtables.com/web/color/html-color-codes.html
 --Excel conversion string: =CONCATENATE("Colors.", B1.0, " = {",  SUBSTITUTE(SUBSTITUTE(D1.0, "(", ""),")",""), ",255} ---@type Color")
 -- Custom colors can be added, but shouldn't be removed or changed.

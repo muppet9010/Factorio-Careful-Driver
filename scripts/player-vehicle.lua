@@ -1,4 +1,4 @@
-local PlayerVehicle = {} ---@class PlayerVehicle
+local PlayerVehicle = {} ---@class PlayerVehicle_Class
 local Events = require("utility.manager-libraries.events")
 
 PlayerVehicle.OnLoad = function()

@@ -22,7 +22,20 @@ for _, carPrototype in pairs(data.raw["car"]) do
     waterVariant.localised_name = { "entity-name.careful_driver-vehicle_stuck_in_water", { "entity-name." .. originalName } }
     waterVariant.localised_description = { "entity-description.careful_driver-vehicle_stuck_in_water", { "entity-name." .. originalName } }
     waterVariant.consumption = "0W" -- Vehicle is incapable of moving.
-    waterVariant.water_reflection.pictures.shift[2] = waterVariant.water_reflection.pictures.shift[2] - 1
+
+    -- Just move the water reflection down a tile as a generic approximation.
+    if waterVariant.water_reflection ~= nil and waterVariant.water_reflection.pictures ~= nil then
+        local pictures = {} ---@type SpriteVariations[]
+        if waterVariant.water_reflection.pictures.filename ~= nil then
+            -- Single picture.
+            pictures[1] = waterVariant.water_reflection.pictures
+        else
+            -- Array of pictures.
+            pictures = waterVariant.water_reflection.pictures
+        end
+        waterVariant.water_reflection.pictures.shift = waterVariant.water_reflection.pictures.shift or { 0, 0 }
+        waterVariant.water_reflection.pictures.shift[2] = waterVariant.water_reflection.pictures.shift[2] - 1
+    end
 
     -- Stopping te collision with water doesn't seem to affect getting the player in/out of the vehicle. But does make testing with the entity easier.
     local collisionMask = CollisionMaskUtils.get_default_mask(waterVariant.type) --[[@as CollisionMask]]

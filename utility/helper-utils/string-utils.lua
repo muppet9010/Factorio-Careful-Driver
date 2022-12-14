@@ -3,7 +3,7 @@
 ]]
 --
 
-local StringUtils = {} ---@class Utility_StringUtils
+local StringUtils = {} ---@class Utility_StringUtils_Class
 local math_floor = math.floor
 local string_match, string_find, string_sub, string_len, string_gsub = string.match, string.find, string.sub, string.len, string.gsub
 
@@ -88,7 +88,7 @@ end
 ---@param requiredLength uint
 ---@return string paddedNumber
 StringUtils.PadNumberToMinimumDigits = function(number, requiredLength)
-	local negativeNumber
+    local negativeNumber
     if number < 0 then
         negativeNumber = true
         number = 0 - number

@@ -12,7 +12,7 @@ FUTURE:
     - To kill the car without corpse or explosion, we'd need to remove the real car, create a dummy car with a cloned prototype that doesn't have a corpse or death explosion, put the players in this car, then kill it via damage. That way the on_entity_death events would look natural to other mods and the  other mods could see who was driving the car from looking at its get_driver(). Alternatively the other mods could make an interface my mod can just call. Damage events we currently create a cause entity for, although in reality this could also be done via API, but it was very simple so done here first. Same concept issue with when we vanish (destroy) a players character to avoid creating a body.
 ]]
 
-local DrivenCar = {} ---@class DrivenCar
+local DrivenCar = {} ---@class DrivenCar_Class
 local EventScheduler = require("utility.manager-libraries.event-scheduler")
 local PositionUtils = require("utility.helper-utils.position-utils")
 local Common = require("common")
@@ -147,7 +147,7 @@ DrivenCar.CheckTrackedCars_EachTick = function(event)
             goto UpdateCarDataInMovingCarDetailsLoop
         end
 
-        currentSpeed = carEntity.speed ---@cast currentSpeed - nil # Cars always have a speed field.
+        currentSpeed = carEntity.speed ---@cast currentSpeed -nil # Cars always have a speed field.
 
         -- Check if the car was not moving last tick. As if not then it can't have stopped this tick due to a collision.
         if movingCarDetails.oldSpeed == 0 then
@@ -392,7 +392,7 @@ end
 DrivenCar.HitWater = function(carEntity, speed, position, surface, entityName)
     -- Work out how much damage will be done by this crash. Resistances then get to reduce damage actually suffered.
     local damageToCar = DrivenCar.CalculateCarImpactDamage(entityName, speed) * global.drivenCar.settings.waterCollisionDamageMultiplier
-    local tokenWaterEntity = surface.create_entity({ name = "careful_driver-token_water_entity", position = position, force = carEntity.force, raise_built = false, create_build_effect_smoke = false }) ---@cast tokenWaterEntity - nil # Have to make this every time, as can't leave it anywhere sensible; as it must be on the cars surface and it needs to have graphics for when other mods reference it.
+    local tokenWaterEntity = surface.create_entity({ name = "careful_driver-token_water_entity", position = position, force = carEntity.force, raise_built = false, create_build_effect_smoke = false }) ---@cast tokenWaterEntity -nil # Have to make this every time, as can't leave it anywhere sensible; as it must be on the cars surface and it needs to have graphics for when other mods reference it.
     carEntity.damage(damageToCar, carEntity.force, "impact", tokenWaterEntity)
     tokenWaterEntity.destroy({ raise_destroy = false })
     if not carEntity.valid then
@@ -414,7 +414,7 @@ DrivenCar.HitWater = function(carEntity, speed, position, surface, entityName)
     -- Transfer the main inventory across.
     local carEntity_mainInventory = carEntity.get_inventory(defines.inventory.car_trunk)
     if carEntity_mainInventory ~= nil and not carEntity_mainInventory.is_empty() then
-        local carInWaterEntity_mainInventory = carInWaterEntity.get_inventory(defines.inventory.car_trunk) ---@cast carInWaterEntity_mainInventory - nil # If the real carEntity has an inventory so will the water copy of it.
+        local carInWaterEntity_mainInventory = carInWaterEntity.get_inventory(defines.inventory.car_trunk) ---@cast carInWaterEntity_mainInventory -nil # If the real carEntity has an inventory so will the water copy of it.
         ---@type uint
         for stackIndex = 1, #carEntity_mainInventory do
             carEntity_mainInventory[stackIndex].swap_stack(carInWaterEntity_mainInventory[stackIndex])
@@ -424,12 +424,12 @@ DrivenCar.HitWater = function(carEntity, speed, position, surface, entityName)
     -- Transfer any fuel across.
     local carEntity_burner = carEntity.burner
     if carEntity_burner ~= nil then
-        local carInWaterEntity_burner = carInWaterEntity.burner ---@cast carInWaterEntity_burner - nil # If the real carEntity has an inventory so will the water copy of it.
+        local carInWaterEntity_burner = carInWaterEntity.burner ---@cast carInWaterEntity_burner -nil # If the real carEntity has an inventory so will the water copy of it.
 
         -- Transfer the fuel input slots.
         local carEntity_burnerInputInventory = carEntity_burner.inventory
         if carEntity_burnerInputInventory ~= nil and not carEntity_burnerInputInventory.is_empty() then
-            local carInWaterEntity_BurnerInputInventory = carInWaterEntity_burner.inventory ---@cast carInWaterEntity_BurnerInputInventory - nil # If the real carEntity has an inventory so will the water copy of it.
+            local carInWaterEntity_BurnerInputInventory = carInWaterEntity_burner.inventory ---@cast carInWaterEntity_BurnerInputInventory -nil # If the real carEntity has an inventory so will the water copy of it.
             ---@type uint
             for stackIndex = 1, #carEntity_burnerInputInventory do
                 carEntity_burnerInputInventory[stackIndex].swap_stack(carInWaterEntity_BurnerInputInventory[stackIndex])
@@ -439,7 +439,7 @@ DrivenCar.HitWater = function(carEntity, speed, position, surface, entityName)
         -- Transfer any burnt fuel inventory slots.
         local carEntity_burnerResultInventory = carEntity_burner.burnt_result_inventory
         if carEntity_burnerResultInventory ~= nil and not carEntity_burnerResultInventory.is_empty() then
-            local carInWaterEntity_BurnerResultInventory = carInWaterEntity_burner.burnt_result_inventory ---@cast carInWaterEntity_BurnerResultInventory - nil # If the real carEntity has an inventory so will the water copy of it.
+            local carInWaterEntity_BurnerResultInventory = carInWaterEntity_burner.burnt_result_inventory ---@cast carInWaterEntity_BurnerResultInventory -nil # If the real carEntity has an inventory so will the water copy of it.
             ---@type uint
             for stackIndex = 1, #carEntity_burnerResultInventory do
                 carEntity_burnerResultInventory[stackIndex].swap_stack(carInWaterEntity_BurnerResultInventory[stackIndex])
@@ -460,7 +460,7 @@ DrivenCar.HitWater = function(carEntity, speed, position, surface, entityName)
     -- Transfer any ammo across.
     local carEntity_ammoInventory = carEntity.get_inventory(defines.inventory.car_ammo)
     if carEntity_ammoInventory ~= nil and not carEntity_ammoInventory.is_empty() then
-        local carInWaterEntity_ammoInventory = carInWaterEntity.get_inventory(defines.inventory.car_ammo) ---@cast carInWaterEntity_ammoInventory - nil # If the real carEntity has an inventory so will the water copy of it.
+        local carInWaterEntity_ammoInventory = carInWaterEntity.get_inventory(defines.inventory.car_ammo) ---@cast carInWaterEntity_ammoInventory -nil # If the real carEntity has an inventory so will the water copy of it.
         ---@type uint
         for stackIndex = 1, #carEntity_ammoInventory do
             carEntity_ammoInventory[stackIndex].swap_stack(carInWaterEntity_ammoInventory[stackIndex])
@@ -470,7 +470,7 @@ DrivenCar.HitWater = function(carEntity, speed, position, surface, entityName)
     -- Transfer any equipment grid items across if the vehicle has one.
     local carEntity_grid = carEntity.grid
     if carEntity_grid ~= nil then
-        local carInWaterEntity_grid = carInWaterEntity.grid ---@cast carInWaterEntity_grid - nil # If the real car entity prototype has one so will our stuck in water prototype.
+        local carInWaterEntity_grid = carInWaterEntity.grid ---@cast carInWaterEntity_grid -nil # If the real car entity prototype has one so will our stuck in water prototype.
         local movedEquipment, energy, shield
         for _, equipment in pairs(carEntity_grid.equipment) do
             movedEquipment = carInWaterEntity_grid.put({ name = equipment.name, position = equipment.position })
@@ -594,7 +594,7 @@ DrivenCar.HitVoid = function(carEntity, speed, position, surface, entityName)
         end
     elseif global.drivenCar.settings.voidCollisionPlayerOutcome == "corpse" then
         -- Players die in the process but leave a corpse behind.
-        local tokenVoidEntity = surface.create_entity({ name = "careful_driver-token_void_entity", position = position, force = carEntity.force, raise_built = false, create_build_effect_smoke = false }) ---@cast tokenVoidEntity - nil # Have to make this every time, as can't leave it anywhere sensible; as it must be on the cars surface and it needs to have graphics for when other mods reference it.
+        local tokenVoidEntity = surface.create_entity({ name = "careful_driver-token_void_entity", position = position, force = carEntity.force, raise_built = false, create_build_effect_smoke = false }) ---@cast tokenVoidEntity -nil # Have to make this every time, as can't leave it anywhere sensible; as it must be on the cars surface and it needs to have graphics for when other mods reference it.
         local driver = carEntity.get_driver()
         if driver ~= nil then
             carEntity.set_driver(nil)
@@ -701,9 +701,9 @@ DrivenCar.CarContinuingToEnterVoid = function(carEnteringVoid)
 end
 
 --- Called when a player presses the key to enter/exit a vehicle.
----@param event CustomInputEvent
+---@param event EventData.CustomInputEvent
 DrivenCar.OnToggleDriving_CustomInput = function(event)
-    local player = game.get_player(event.player_index) ---@cast player - nil
+    local player = game.get_player(event.player_index) ---@cast player -nil
     local vehicle = player.vehicle
     if vehicle == nil then
         -- Player is trying to get in to a vehicle.

@@ -3,7 +3,7 @@
 ]]
 --
 
-local TrainUtils = {} ---@class Utility_TrainUtils
+local TrainUtils = {} ---@class Utility_TrainUtils_Class
 local PrototypeAttributes = require("utility.functions.prototype-attributes")
 local EntityUtils = require("utility.helper-utils.entity-utils")
 local PositionUtils = require("utility.helper-utils.position-utils")
@@ -82,7 +82,7 @@ TrainUtils.GetTrainSpeedCalculationData = function(train, train_speed, trainCarr
 
     -- If trainCarriagesDataArray is nil we'll build it up as we go from the train_carriages array. This means that the functions logic only has 1 data structure to worry about. The trainCarriagesDataArray isn't passed out as a return and so while we build up the cache object it is dropped at the end of the function.
     if trainCarriagesDataArray == nil then
-        ---@cast train_carriages - nil # It will be provided if trainCarriagesDataArray wasn't, otherwise it can just error.
+        ---@cast train_carriages -nil # It will be provided if trainCarriagesDataArray wasn't, otherwise it can just error.
         trainCarriagesDataArray = {} ---@type TrainUtils_TrainCarriageData[]
         for i, entity in pairs(train_carriages) do
             trainCarriagesDataArray[i] = { entity = entity }

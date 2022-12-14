@@ -3,7 +3,7 @@
 ]]
 --
 
-local InventoryUtils = {} ---@class Utility_InventoryUtils
+local InventoryUtils = {} ---@class Utility_InventoryUtils_Class
 local TableUtils = require("utility.helper-utils.table-utils")
 local LoggingUtils = require("utility.helper-utils.logging-utils")
 local math_min, math_max, math_ceil = math.min, math.max, math.ceil

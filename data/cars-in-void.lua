@@ -9,6 +9,15 @@
 local TableUtils = require("utility.helper-utils.table-utils")
 local Common = require("common")
 
+--- Returns the value if non nil, otherwise the default value
+---@param value any
+---@param default any
+---@return any
+local ValueOrDefault = function(value, default)
+    if value ~= nil then return value end
+    return default
+end
+
 for _, carPrototype in pairs(data.raw["car"]) do
     -- Skip any vehicles from our mod.
     if string.find(carPrototype.name, "careful_driver-", 1, true) then goto EndOfCarPrototype end
@@ -18,9 +27,10 @@ for _, carPrototype in pairs(data.raw["car"]) do
     local carBodyRotationsInVoid, tintableCarBodyRotationsInVoid, carTurretRotationsInVoid, tintableCarTurretRotationsInVoid = {}, {}, {}, {}
 
     -- Make the framework of our animations for the direction count.
-    local directionCount = carPrototype.animation.layers[1].direction_count
-    local targetFrameCount = carPrototype.animation.layers[1].frame_count -- Just assume the first layer is the one with all the variations. And the later layers are the ones with potentially less real frames.
-    local maxAdvance = carPrototype.animation.layers[1].max_advance -- Not entirely sure what it does, but we need the same on all layers.
+    local primaryAnimationLayer = carPrototype.animation.layers[1]
+    local directionCount = primaryAnimationLayer.direction_count
+    local targetFrameCount = ValueOrDefault(primaryAnimationLayer.frame_count, 1) -- Just assume the first layer is the one with all the variations. And the later layers are the ones with potentially less real frames.
+    local maxAdvance = primaryAnimationLayer.max_advance -- Not entirely sure what it does, but we need the same on all layers.
 
     for animationPrototypes, nameOptions in pairs({ [carBodyRotationsInVoid] = { part = "body", tintable = "nonTinted" }, [tintableCarBodyRotationsInVoid] = { part = "body", tintable = "tinted" }, [carTurretRotationsInVoid] = { part = "turret", tintable = "nonTinted" }, [tintableCarTurretRotationsInVoid] = { part = "turret", tintable = "tinted" } }) do
         ---@cast animationPrototypes table<int, Prototype.Animation>
@@ -84,15 +94,15 @@ for _, carPrototype in pairs(data.raw["car"]) do
                         -- For each rotation in the stripe push the details to the Animation prototype.
                         local stripeInnerCount = 1
                         for heightCount = 1, stripe.height_in_frames do
-                            for widthCount = 1, stripe.width_in_frames, animationBase.frame_count do
+                            for widthCount = 1, stripe.width_in_frames, ValueOrDefault(animationBase.frame_count, 1) do
                                 rotationCount = rotationCount + 1
                                 local carRotationInVoid_layer = {} ---@type Animation
 
                                 -- Extract the stripe details and push them to the new layer.
                                 carRotationInVoid_layer.filename = stripe.filename
                                 -- Select the right bit of the sprite for our specific frame row.
-                                carRotationInVoid_layer.x = (widthCount - 1) * animationBase.width --[[@as int16]]
-                                carRotationInVoid_layer.y = (heightCount - 1) * animationBase.height --[[@as int16]]
+                                carRotationInVoid_layer.x = (widthCount - 1) * ValueOrDefault(animationBase.width, animationBase.size) --[[@as int16]]
+                                carRotationInVoid_layer.y = (heightCount - 1) * ValueOrDefault(animationBase.height, animationBase.size) --[[@as int16]]
 
                                 -- If this stripe doesn't have the right number of frames then just duplicate the first one, don't worry about trying to handle odd multiplications. The original vanilla car and tank structure duplicated the stripes to make up for it, but we are ignoring duplicated stripes as they just make things weird to process.
                                 if stripe.width_in_frames ~= targetFrameCount then
@@ -101,8 +111,8 @@ for _, carPrototype in pairs(data.raw["car"]) do
                                     carRotationInVoid_layer.line_length = 1
                                 else
                                     carRotationInVoid_layer.frame_count = targetFrameCount
-                                    carRotationInVoid_layer.repeat_count = animationBase.repeat_count
-                                    carRotationInVoid_layer.line_length = animationBase.line_length
+                                    carRotationInVoid_layer.repeat_count = ValueOrDefault(animationBase.repeat_count, 1)
+                                    carRotationInVoid_layer.line_length = ValueOrDefault(animationBase.line_length, 0)
                                 end
 
                                 -- For each field in the main animation details add them to the animation prototype, excluding the stripes field as we've already processed the data we need from this.
@@ -158,11 +168,15 @@ for _, carPrototype in pairs(data.raw["car"]) do
 
                     -- Select the right bit of the animations for our specific frame row.
                     -- This is likely a grid of animations, so need to find the right one for our rotation.
-                    local rotationsPerLine = animationBase.line_length / animationBase.frame_count
+                    local rotationsPerLine = ValueOrDefault(animationBase.line_length, 0) / ValueOrDefault(animationBase.frame_count, 1)
+                    if rotationsPerLine < 1 then
+                        -- Needed for Avatar mod with its badly defined (but valid) graphics. They don't behave as that mod's author intended, but they do load without error.
+                        rotationsPerLine = 1
+                    end
                     local yLine = math.floor((rotationCount - 1) / rotationsPerLine)
-                    carRotationInVoid_layer.y = yLine * animationBase.height --[[@as int16]]
-                    local xLine = (rotationCount - ((yLine * rotationsPerLine) + 1)) * animationBase.frame_count
-                    carRotationInVoid_layer.x = xLine * animationBase.width --[[@as int16]]
+                    carRotationInVoid_layer.y = yLine * ValueOrDefault(animationBase.height, animationBase.size) --[[@as int16]]
+                    local xLine = (rotationCount - ((yLine * rotationsPerLine) + 1)) * ValueOrDefault(animationBase.frame_count, 1)
+                    carRotationInVoid_layer.x = xLine * ValueOrDefault(animationBase.width, animationBase.size) --[[@as int16]]
 
                     -- If this animation doesn't have the right number of frames then just duplicate the first one, don't worry about trying to handle odd multiplications. The original vanilla car and tank structure duplicated the animations to make up for it, but we are ignoring duplicated animations as they just make things weird to process.
                     if animationBase.frame_count ~= targetFrameCount then
@@ -171,8 +185,8 @@ for _, carPrototype in pairs(data.raw["car"]) do
                         carRotationInVoid_layer.line_length = 1
                     else
                         carRotationInVoid_layer.frame_count = targetFrameCount
-                        carRotationInVoid_layer.repeat_count = animationBase.repeat_count
-                        carRotationInVoid_layer.line_length = animationBase.line_length
+                        carRotationInVoid_layer.repeat_count = ValueOrDefault(animationBase.repeat_count, 1)
+                        carRotationInVoid_layer.line_length = ValueOrDefault(animationBase.line_length, 0)
                     end
 
                     -- For each field in the main animation details add them to the animation prototype.

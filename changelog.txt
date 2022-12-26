@@ -1,4 +1,13 @@
 ---------------------------------------------------------------------------------------------------
+Version: 1.0.4
+Date: 2022-12-XXX
+  Features:
+  Changes:
+  Bugfixes:
+    - Yet more mods supported that have different modded vehicle definition styles: Avatar,
+    - Added default values for modded vehicles that don't provide standard graphic definition fields. Should help avoid some other future compatibility issues.
+  Info:
+---------------------------------------------------------------------------------------------------
 Version: 1.0.3
 Date: 2022-12-14
   Features:

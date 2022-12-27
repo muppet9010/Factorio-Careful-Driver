@@ -27,7 +27,12 @@ for _, carPrototype in pairs(data.raw["car"]) do
     local carBodyRotationsInVoid, tintableCarBodyRotationsInVoid, carTurretRotationsInVoid, tintableCarTurretRotationsInVoid = {}, {}, {}, {}
 
     -- Make the framework of our animations for the direction count.
-    local primaryAnimationLayer = carPrototype.animation.layers[1]
+    local primaryAnimationLayer
+    if carPrototype.animation.layers ~= nil then
+        primaryAnimationLayer = carPrototype.animation.layers[1]
+    else
+        primaryAnimationLayer = carPrototype.animation
+    end
     local directionCount = primaryAnimationLayer.direction_count
     local targetFrameCount = ValueOrDefault(primaryAnimationLayer.frame_count, 1) -- Just assume the first layer is the one with all the variations. And the later layers are the ones with potentially less real frames.
     local maxAdvance = primaryAnimationLayer.max_advance -- Not entirely sure what it does, but we need the same on all layers.

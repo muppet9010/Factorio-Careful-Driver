@@ -4,7 +4,7 @@ Date: 2022-12-XXX
   Features:
   Changes:
   Bugfixes:
-    - Yet more mods supported that have different modded vehicle definition styles: Avatar, Shield Projector.
+    - Yet more mods supported that have different modded vehicle definition styles: Avatar, Shield Projector, Raven.
     - Added default values for modded vehicles that don't provide standard graphic definition fields. Should help avoid some other future compatibility issues.
   Info:
 ---------------------------------------------------------------------------------------------------

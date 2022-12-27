@@ -3,7 +3,7 @@
 
     Run in final fixes data stage in the hope I don't have to add any dependencies on other mods, as I don't want to change their prototypes, just make a copy of them.
 
-    This is all a bit flaky and written to just work with base game assets.
+    This is all a bit flaky and written to just work with base game assets and mods that have been encountered.
 ]]
 
 local TableUtils = require("utility.helper-utils.table-utils")
@@ -84,6 +84,8 @@ for _, carPrototype in pairs(data.raw["car"]) do
             rotatedAnimationBase.direction_count = nil
             local animationBase = rotatedAnimationBase --[[@as Animation]]
 
+            local animationBase_frameCount = ValueOrDefault(animationBase.frame_count, 1) ---@as uint
+
             -- Handle the filename specification format.
             if animationBase.stripes ~= nil then
                 -- Loop over the stripes entries.
@@ -99,7 +101,14 @@ for _, carPrototype in pairs(data.raw["car"]) do
                         -- For each rotation in the stripe push the details to the Animation prototype.
                         local stripeInnerCount = 1
                         for heightCount = 1, stripe.height_in_frames do
-                            for widthCount = 1, stripe.width_in_frames, ValueOrDefault(animationBase.frame_count, 1) do
+                            if stripe.width_in_frames < animationBase_frameCount then
+                                -- TODO: This can be like vanilla where the next file is effectively ignored by our processing. We handle this in `if stripe.width_in_frames ~= targetFrameCount then` later where we just duplicate the current frame up to the required number. And then ignore the duplicate usage of the filename as the second stripe.
+                                -- TODO: However in Raven the later sprites for this rotation are actually in the same line number, but in the next file. And the file is actually different name and contents, so we don't ignore the second file in Raven mod like we do in regular hr car mask.
+                                -- Option 1: just skip the vehicle called raven to avoid the error and leave our working hack for vanilla car in place.
+                                -- **Option 2**: remove our hack and instead count how many are in this line and then know that we are checking the next N files for the same line to find all of our count. As one Raven has 2 files per rotation and another raven has 4 files per rotation. Then register that these other files are all to be skipped as we have effectively processed them already.
+                                local x = 1
+                            end
+                            for widthCount = 1, stripe.width_in_frames, animationBase_frameCount do
                                 rotationCount = rotationCount + 1
                                 local carRotationInVoid_layer = {} ---@type Animation
 
@@ -173,14 +182,14 @@ for _, carPrototype in pairs(data.raw["car"]) do
 
                     -- Select the right bit of the animations for our specific frame row.
                     -- This is likely a grid of animations, so need to find the right one for our rotation.
-                    local rotationsPerLine = ValueOrDefault(animationBase.line_length, 0) / ValueOrDefault(animationBase.frame_count, 1)
+                    local rotationsPerLine = ValueOrDefault(animationBase.line_length, 0) / animationBase_frameCount
                     if rotationsPerLine < 1 then
                         -- Needed for Avatar mod with its badly defined (but valid) graphics. They don't behave as that mod's author intended, but they do load without error.
                         rotationsPerLine = 1
                     end
                     local yLine = math.floor((rotationCount - 1) / rotationsPerLine)
                     carRotationInVoid_layer.y = yLine * ValueOrDefault(animationBase.height, animationBase.size) --[[@as int16]]
-                    local xLine = (rotationCount - ((yLine * rotationsPerLine) + 1)) * ValueOrDefault(animationBase.frame_count, 1)
+                    local xLine = (rotationCount - ((yLine * rotationsPerLine) + 1)) * animationBase_frameCount
                     carRotationInVoid_layer.x = xLine * ValueOrDefault(animationBase.width, animationBase.size) --[[@as int16]]
 
                     -- If this animation doesn't have the right number of frames then just duplicate the first one, don't worry about trying to handle odd multiplications. The original vanilla car and tank structure duplicated the animations to make up for it, but we are ignoring duplicated animations as they just make things weird to process.
